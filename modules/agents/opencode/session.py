@@ -132,8 +132,13 @@ class OpenCodeSessionManager:
     async def get_or_create_session_id(
         self, request: AgentRequest, server: OpenCodeServerManager
     ) -> Optional[str]:
-        """Get a cached OpenCode session id, create a new one, or resume an existing one."""
+        lock = self.get_session_lock(request.base_session_id)
+        async with lock:
+            return await self._get_or_create_session_id_locked(request, server)
 
+    async def _get_or_create_session_id_locked(
+        self, request: AgentRequest, server: OpenCodeServerManager
+    ) -> Optional[str]:
         if request.resume_session_id:
             logger.info(f"Attempting to resume session: {request.resume_session_id}")
             existing = await server.get_session(

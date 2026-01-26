@@ -330,8 +330,18 @@ class MessageHandler:
                 handled = await self._handle_inline_stop(context)
                 if not handled:
                     await self.im_client.send_message(
-                        context, "ℹ️ No active session to stop."
+                        context, "ℹ️ 当前没有正在执行的任务"
                     )
+
+            elif callback_data == "cmd_diff":
+                await command_handlers.handle_diff(context)
+
+            elif callback_data == "cmd_resume":
+                await command_handlers.handle_resume_modal(context)
+
+            elif callback_data.startswith("resume_session:"):
+                session_id = callback_data.replace("resume_session:", "")
+                await command_handlers.handle_resume_session(context, session_id)
 
             elif (
                 callback_data.startswith("info_") and callback_data != "info_msg_types"

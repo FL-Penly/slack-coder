@@ -137,6 +137,7 @@ class Controller:
             "stop": self.command_handler.handle_stop,
             "sessions": self.command_handler.handle_sessions,
             "diff": self.command_handler.handle_diff,
+            "help": self.command_handler.handle_help,
         }
 
         # Register callbacks with the IM client

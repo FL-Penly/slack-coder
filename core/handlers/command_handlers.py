@@ -113,35 +113,37 @@ class CommandHandlers:
         # For Slack, create interactive buttons using Block Kit
         user_name = user_info.get("real_name") or user_info.get("name") or "User"
 
-        # Create interactive buttons for commands
         buttons = [
-            # Row 1: Directory management
             [
-                InlineButton(text="📁 Current Dir", callback_data="cmd_cwd"),
-                InlineButton(text="📂 Change Work Dir", callback_data="cmd_change_cwd"),
+                InlineButton(text="📋 恢复会话", callback_data="cmd_resume"),
+                InlineButton(text="🛑 停止执行", callback_data="cmd_stop"),
             ],
-            # Row 2: Session and Settings
             [
-                InlineButton(text="🔄 Clear All Session", callback_data="cmd_clear"),
-                InlineButton(text="⚙️ Settings", callback_data="cmd_settings"),
+                InlineButton(text="📁 当前目录", callback_data="cmd_cwd"),
+                InlineButton(text="📂 切换目录", callback_data="cmd_change_cwd"),
             ],
-            # Row 3: Agent/Model switching
-            [InlineButton(text="🤖 Agent Settings", callback_data="cmd_routing")],
-            # Row 4: Help
-            [InlineButton(text="ℹ️ How it Works", callback_data="info_how_it_works")],
+            [
+                InlineButton(text="📊 Git 变更", callback_data="cmd_diff"),
+                InlineButton(text="🔄 清除会话", callback_data="cmd_clear"),
+            ],
+            [
+                InlineButton(text="🤖 Agent 设置", callback_data="cmd_routing"),
+                InlineButton(text="⚙️ 设置", callback_data="cmd_settings"),
+            ],
+            [InlineButton(text="ℹ️ 使用说明", callback_data="info_how_it_works")],
         ]
 
         keyboard = InlineKeyboard(buttons=buttons)
 
-        welcome_text = f"""🎉 **Welcome to Vibe Remote!**
+        welcome_text = f"""🎉 **欢迎使用 Vibe Remote！**
 
-👋 Hello **{user_name}**!
-🔧 Platform: **{platform_name}**
-🤖 Agent: **{agent_display_name}**
-📍 Channel: **{channel_info.get("name", "Unknown")}**
+👋 你好 **{user_name}**！
+🔧 平台：**{platform_name}**
+🤖 Agent：**{agent_display_name}**
+📍 频道：**{channel_info.get("name", "Unknown")}**
 
-**Quick Actions:**
-Use the buttons below to manage your {agent_display_name} sessions, or simply type any message to start chatting with {agent_display_name}!"""
+**快捷操作：**
+使用下方按钮管理 {agent_display_name} 会话，或直接发消息开始对话！"""
 
         # Send command response to channel (not in thread)
         channel_context = self._get_channel_context(context)
@@ -433,14 +435,18 @@ Use the buttons below to manage your {agent_display_name} sessions, or simply ty
 
     async def handle_diff(self, context: MessageContext, args: str = ""):
         try:
+            trigger_id = (
+                context.platform_specific.get("trigger_id")
+                if context.platform_specific
+                else None
+            )
             channel_context = self._get_channel_context(context)
             working_path = self.controller.get_cwd(context)
 
             if not os.path.isdir(os.path.join(working_path, ".git")):
                 await self.im_client.send_message(
                     channel_context,
-                    f"❌ Not a git repository: `{working_path}`\n\n"
-                    "The `/diff` command requires a git repository.",
+                    f"❌ 不是 Git 仓库：`{working_path}`",
                 )
                 return
 
@@ -457,18 +463,11 @@ Use the buttons below to manage your {agent_display_name} sessions, or simply ty
             if process.returncode != 0:
                 error_msg = stat_stderr.decode("utf-8", errors="replace").strip()
                 await self.im_client.send_message(
-                    channel_context, f"❌ Git diff failed: {error_msg}"
+                    channel_context, f"❌ Git diff 失败：{error_msg}"
                 )
                 return
 
             stat_output = stat_stdout.decode("utf-8", errors="replace").strip()
-
-            if not stat_output:
-                await self.im_client.send_message(
-                    channel_context,
-                    f"✅ No uncommitted changes in `{working_path}`",
-                )
-                return
 
             process = await asyncio.create_subprocess_exec(
                 "git",
@@ -480,39 +479,185 @@ Use the buttons below to manage your {agent_display_name} sessions, or simply ty
             diff_stdout, _ = await process.communicate()
             diff_output = diff_stdout.decode("utf-8", errors="replace")
 
-            summary_lines = [
-                "📊 **Git Diff Summary**",
-                f"📁 Directory: `{working_path}`",
-                "",
-                "```",
-                stat_output,
-                "```",
-            ]
-
-            await self.im_client.send_message(
-                channel_context, "\n".join(summary_lines), parse_mode="markdown"
-            )
-
-            if hasattr(self.im_client, "upload_markdown") and len(diff_output) > 100:
-                try:
-                    await self.im_client.upload_markdown(
-                        channel_context,
-                        title="changes.diff",
-                        content=diff_output,
-                        filetype="diff",
+            if trigger_id and hasattr(self.im_client, "open_diff_modal"):
+                await self.im_client.open_diff_modal(
+                    trigger_id,
+                    stat_output,
+                    diff_output,
+                    working_path,
+                    context.channel_id,
+                )
+            else:
+                if not stat_output:
+                    await self.im_client.send_message(
+                        channel_context, f"✅ 没有未提交的更改\n📁 `{working_path}`"
                     )
-                except Exception as upload_err:
-                    logger.warning(f"Failed to upload diff file: {upload_err}")
-                    if len(diff_output) <= 3000:
-                        await self.im_client.send_message(
-                            channel_context,
-                            f"```diff\n{diff_output}\n```",
-                            parse_mode="markdown",
-                        )
+                else:
+                    await self.im_client.send_message(
+                        channel_context,
+                        f"📊 **Git 变更**\n📁 `{working_path}`\n```\n{stat_output}\n```",
+                        parse_mode="markdown",
+                    )
 
         except Exception as e:
             logger.error(f"Error generating diff: {e}", exc_info=True)
             channel_context = self._get_channel_context(context)
             await self.im_client.send_message(
-                channel_context, f"❌ Error generating diff: {str(e)}"
+                channel_context, f"❌ 获取 Git 变更失败：{str(e)}"
+            )
+
+    async def handle_help(self, context: MessageContext, args: str = ""):
+        """Handle /help command - show available commands"""
+        channel_context = self._get_channel_context(context)
+
+        help_text = """📚 **Vibe Remote 使用说明**
+
+**快速开始**
+• 输入 `/vibe-start` 打开控制面板
+• 直接 @Vibe Remote 发消息即可与 AI 对话
+
+**控制面板功能**
+• 📋 恢复会话 - 选择并恢复历史对话
+• 🛑 停止执行 - 中断当前 AI 任务
+• 📁 当前目录 / 📂 切换目录 - 管理工作目录
+• 📊 Git 变更 - 查看代码改动
+• 🔄 清除会话 - 重置所有会话
+• 🤖 Agent 设置 - 切换 AI 模型
+
+**使用技巧**
+• 每个 Slack 线程 = 独立的对话会话
+• 可同时开多个线程并行处理任务
+• 在线程中输入 `stop` 可快速停止
+"""
+
+        await self.im_client.send_message(
+            channel_context, help_text, parse_mode="markdown"
+        )
+
+    async def handle_resume_modal(self, context: MessageContext):
+        """Show session list in a modal"""
+        try:
+            trigger_id = (
+                context.platform_specific.get("trigger_id")
+                if context.platform_specific
+                else None
+            )
+
+            if not trigger_id:
+                channel_context = self._get_channel_context(context)
+                await self.im_client.send_message(
+                    channel_context, "❌ 无法打开弹窗，请重试"
+                )
+                return
+
+            working_path = self.controller.get_cwd(context)
+            opencode_agent = self.controller.agent_service.agents.get("opencode")
+
+            if not opencode_agent:
+                channel_context = self._get_channel_context(context)
+                await self.im_client.send_message(
+                    channel_context, "❌ OpenCode agent 未启用"
+                )
+                return
+
+            server = await opencode_agent._get_server()
+            await server.ensure_running()
+            sessions = await server.list_sessions(working_path)
+
+            if hasattr(self.im_client, "open_sessions_modal"):
+                await self.im_client.open_sessions_modal(
+                    trigger_id, sessions, working_path, context.channel_id
+                )
+
+        except Exception as e:
+            logger.error(f"Error showing sessions modal: {e}", exc_info=True)
+            channel_context = self._get_channel_context(context)
+            await self.im_client.send_message(
+                channel_context, f"❌ 获取会话列表失败：{str(e)}"
+            )
+
+    async def handle_resume_session(self, context: MessageContext, session_id: str):
+        """Resume a specific session - show history and bind thread"""
+        try:
+            channel_context = self._get_channel_context(context)
+
+            opencode_agent = self.controller.agent_service.agents.get("opencode")
+            if not opencode_agent:
+                await self.im_client.send_message(
+                    channel_context, "❌ OpenCode agent 未启用"
+                )
+                return
+
+            working_path = self.controller.get_cwd(context)
+            server = await opencode_agent._get_server()
+            await server.ensure_running()
+
+            target_session = await server.get_session(session_id, working_path)
+            if not target_session:
+                await self.im_client.send_message(
+                    channel_context, f"❌ 会话不存在：`{session_id}`"
+                )
+                return
+
+            title = target_session.get("title", "")
+            if title.startswith("vibe-remote:"):
+                title = ""
+            display_name = title if title else session_id[:12]
+
+            messages = await server.list_messages(session_id, working_path)
+
+            history_lines = [f"📋 **恢复会话：{display_name}**\n"]
+
+            msg_count = 0
+            for msg in messages[-10:]:
+                info = msg.get("info", {})
+                role = info.get("role", "")
+                parts = msg.get("parts", [])
+                content = ""
+
+                for part in parts:
+                    if part.get("type") == "text":
+                        content = part.get("text", "")
+                        break
+
+                if content and role in ("user", "assistant"):
+                    role_icon = "👤" if role == "user" else "🤖"
+                    content_preview = content.replace("\n", " ")[:100]
+                    if len(content) > 100:
+                        content_preview += "..."
+                    history_lines.append(f"{role_icon} {content_preview}")
+                    msg_count += 1
+
+            if msg_count == 0:
+                history_lines.append("_(暂无历史消息)_")
+
+            history_lines.append("\n---\n💬 **在下方回复继续对话**")
+
+            message_ts = await self.im_client.send_message(
+                channel_context,
+                "\n".join(history_lines),
+                parse_mode="markdown",
+            )
+
+            if message_ts:
+                settings_key = self.controller._get_settings_key(context)
+                base_session_id = f"slack_{message_ts}"
+                self.settings_manager.set_agent_session_mapping(
+                    settings_key,
+                    "opencode",
+                    base_session_id,
+                    session_id,
+                )
+                self.settings_manager.mark_thread_active(
+                    context.user_id, context.channel_id, message_ts
+                )
+                logger.info(
+                    f"Bound thread {message_ts} (base_session_id={base_session_id}) to OpenCode session {session_id}"
+                )
+
+        except Exception as e:
+            logger.error(f"Error resuming session: {e}", exc_info=True)
+            channel_context = self._get_channel_context(context)
+            await self.im_client.send_message(
+                channel_context, f"❌ 恢复会话失败：{str(e)}"
             )

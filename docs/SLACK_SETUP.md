@@ -56,7 +56,17 @@ Go to [api.slack.com/apps](https://api.slack.com/apps) and create app with this 
       "home_tab_enabled": true,
       "messages_tab_enabled": true,
       "messages_tab_read_only_enabled": false
-    }
+    },
+    "slash_commands": [
+      {"command": "/vibe-start", "description": "打开控制面板", "should_escape": false},
+      {"command": "/vibe-stop", "description": "停止当前 AI 执行", "should_escape": false},
+      {"command": "/vibe-cwd", "description": "显示当前工作目录", "should_escape": false},
+      {"command": "/vibe-setcwd", "description": "设置工作目录", "usage_hint": "~/projects/myapp", "should_escape": false},
+      {"command": "/vibe-clear", "description": "清除所有会话", "should_escape": false},
+      {"command": "/vibe-sessions", "description": "列出 OpenCode 会话", "should_escape": false},
+      {"command": "/vibe-diff", "description": "显示 Git 变更", "should_escape": false},
+      {"command": "/vibe-help", "description": "显示帮助信息", "should_escape": false}
+    ]
   },
   "oauth_config": {
     "scopes": {
