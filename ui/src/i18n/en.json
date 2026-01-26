@@ -34,7 +34,8 @@
     "editSetup": "Edit setup",
     "manageChannels": "Manage channels",
     "viewLogs": "View logs",
-    "saveAndRestart": "Save & Restart"
+    "saveAndRestart": "Save & Restart",
+    "add": "Add"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -118,7 +119,11 @@
     "cliPathDetection": "CLI path detection and enablement",
     "recommended": "(recommended)",
     "permissionHint": "OpenCode requires permission config to skip approval prompts.",
-    "setupPermission": "Setup Permission"
+    "setupPermission": "Setup Permission",
+    "envVars": "Environment Variables",
+    "envVarsHint": "Custom environment variables passed to OpenCode (e.g., GOOGLE_CLOUD_PROJECT, VERTEX_LOCATION for Vertex AI).",
+    "envKeyPlaceholder": "KEY",
+    "envValuePlaceholder": "value"
   },
   "channelList": {
     "title": "Channel Settings",

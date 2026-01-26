@@ -777,6 +777,7 @@ class Controller:
                     logger.warning(f"Failed to fetch OpenCode data: {e}")
 
             if hasattr(self.im_client, "update_routing_modal"):
+                current_env_vars = self._get_opencode_env_vars()
                 await self.im_client.update_routing_modal(  # type: ignore[attr-defined]
                     view_id=view_id,
                     view_hash=view_hash,
@@ -791,6 +792,7 @@ class Controller:
                     selected_opencode_agent=oc_agent,
                     selected_opencode_model=oc_model,
                     selected_opencode_reasoning=oc_reasoning,
+                    current_env_vars=current_env_vars,
                 )
         except Exception as e:
             logger.error(f"Error updating routing modal: {e}", exc_info=True)
@@ -805,12 +807,11 @@ class Controller:
         opencode_model: Optional[str],
         opencode_reasoning_effort: Optional[str] = None,
         require_mention: Optional[bool] = None,
+        env_vars: Optional[Dict[str, str]] = None,
     ):
-        """Handle routing update submission (from Slack modal)"""
         from modules.settings_manager import ChannelRouting
 
         try:
-            # Create routing object
             routing = ChannelRouting(
                 agent_backend=backend,
                 opencode_agent=opencode_agent,
@@ -818,16 +819,15 @@ class Controller:
                 opencode_reasoning_effort=opencode_reasoning_effort,
             )
 
-            # Get settings key
             settings_key = channel_id if channel_id else user_id
 
-            # Save routing
             self.settings_manager.set_channel_routing(settings_key, routing)
-
-            # Save require_mention setting
             self.settings_manager.set_require_mention(settings_key, require_mention)
 
-            # Build confirmation message
+            env_vars_changed = False
+            if env_vars is not None:
+                env_vars_changed = await self._update_opencode_env_vars(env_vars)
+
             parts = [f"Backend: **{backend}**"]
             if backend == "opencode":
                 if opencode_agent:
@@ -836,8 +836,9 @@ class Controller:
                     parts.append(f"Model: **{opencode_model}**")
                 if opencode_reasoning_effort:
                     parts.append(f"Reasoning Effort: **{opencode_reasoning_effort}**")
+                if env_vars:
+                    parts.append(f"Env Vars: **{len(env_vars)} configured**")
 
-            # Add require_mention status to confirmation
             if require_mention is None:
                 parts.append("Require @mention: **(Default)**")
             elif require_mention:
@@ -863,6 +864,13 @@ class Controller:
                 f"agent={opencode_agent}, model={opencode_model}, require_mention={require_mention}"
             )
 
+            if env_vars_changed:
+                await self.im_client.send_message(
+                    context,
+                    "⚠️ Environment variables updated. Restart vibe to apply changes.",
+                    parse_mode="markdown",
+                )
+
         except Exception as e:
             logger.error(f"Error updating routing: {e}")
             context = MessageContext(
@@ -873,6 +881,34 @@ class Controller:
             await self.im_client.send_message(
                 context, f"❌ Failed to update routing: {str(e)}"
             )
+
+    async def _update_opencode_env_vars(self, env_vars: Dict[str, str]) -> bool:
+        from config.v2_config import V2Config
+        from config import paths
+
+        try:
+            config = V2Config.load()
+            current_env_vars = config.agents.opencode.env_vars or {}
+
+            if current_env_vars == env_vars:
+                return False
+
+            config.agents.opencode.env_vars = env_vars
+            config.save()
+            logger.info(f"Updated OpenCode env_vars: {list(env_vars.keys())}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update OpenCode env_vars: {e}")
+            return False
+
+    def _get_opencode_env_vars(self) -> Dict[str, str]:
+        from config.v2_config import V2Config
+
+        try:
+            config = V2Config.load()
+            return config.agents.opencode.env_vars or {}
+        except Exception:
+            return {}
 
     # Main run method
     def run(self):

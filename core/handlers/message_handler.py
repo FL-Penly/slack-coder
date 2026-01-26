@@ -1,8 +1,9 @@
 """Message routing and Agent communication handlers"""
 
+import asyncio
 import logging
 import re
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from modules.agents import AgentRequest
 from modules.im import MessageContext
@@ -23,15 +24,19 @@ class MessageHandler:
         self.session_manager = controller.session_manager
         self.settings_manager = controller.settings_manager
         self.formatter = controller.im_client.formatter
-        self.session_handler = None  # Will be set after creation
+        self.session_handler = None
         self.receiver_tasks = controller.receiver_tasks
+        self._dedup_locks: Dict[str, asyncio.Lock] = {}
 
     def set_session_handler(self, session_handler):
-        """Set reference to session handler"""
         self.session_handler = session_handler
 
+    def _get_dedup_lock(self, key: str) -> asyncio.Lock:
+        if key not in self._dedup_locks:
+            self._dedup_locks[key] = asyncio.Lock()
+        return self._dedup_locks[key]
+
     def _get_settings_key(self, context: MessageContext) -> str:
-        """Get settings key - delegate to controller"""
         return self.controller._get_settings_key(context)
 
     def _get_target_context(self, context: MessageContext) -> MessageContext:
@@ -60,25 +65,22 @@ class MessageHandler:
                 await self.controller.command_handler.handle_start(context, "")
                 return
 
-            # Deduplication: check if this message has already been processed
-            # This prevents duplicate processing when vibe-remote restarts and
-            # Slack resends events
             message_ts = context.message_id
             thread_ts = context.thread_id or context.message_id
             if message_ts and thread_ts:
-                if self.settings_manager.is_message_already_processed(
-                    context.channel_id, thread_ts, message_ts
-                ):
-                    logger.info(
-                        f"Skipping already processed message: channel={context.channel_id}, "
-                        f"thread={thread_ts}, message={message_ts}"
+                dedup_key = f"{context.channel_id}:{thread_ts}:{message_ts}"
+                async with self._get_dedup_lock(dedup_key):
+                    if self.settings_manager.is_message_already_processed(
+                        context.channel_id, thread_ts, message_ts
+                    ):
+                        logger.info(
+                            f"Skipping already processed message: channel={context.channel_id}, "
+                            f"thread={thread_ts}, message={message_ts}"
+                        )
+                        return
+                    self.settings_manager.record_processed_message(
+                        context.channel_id, thread_ts, message_ts
                     )
-                    return
-                # Record this message as processed immediately to prevent duplicates
-                # even if processing fails (we don't want to retry failed messages forever)
-                self.settings_manager.record_processed_message(
-                    context.channel_id, thread_ts, message_ts
-                )
 
             # Skip automatic cleanup; receiver tasks are retained until shutdown
 

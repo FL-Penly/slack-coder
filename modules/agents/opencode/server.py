@@ -35,10 +35,12 @@ class OpenCodeServerManager:
         binary: str = "opencode",
         port: int = DEFAULT_OPENCODE_PORT,
         request_timeout_seconds: int = 60,
+        env_vars: Optional[Dict[str, str]] = None,
     ):
         self.binary = binary
         self.port = port
         self.request_timeout_seconds = request_timeout_seconds
+        self.env_vars = env_vars or {}
         self.host = DEFAULT_OPENCODE_HOST
         self._process: Optional[Process] = None
         self._base_url: Optional[str] = None
@@ -53,6 +55,7 @@ class OpenCodeServerManager:
         binary: str = "opencode",
         port: int = DEFAULT_OPENCODE_PORT,
         request_timeout_seconds: int = 60,
+        env_vars: Optional[Dict[str, str]] = None,
     ) -> "OpenCodeServerManager":
         async with cls._class_lock:
             if cls._instance is None:
@@ -60,6 +63,7 @@ class OpenCodeServerManager:
                     binary=binary,
                     port=port,
                     request_timeout_seconds=request_timeout_seconds,
+                    env_vars=env_vars,
                 )
             elif (
                 cls._instance.binary != binary
@@ -345,6 +349,9 @@ class OpenCodeServerManager:
 
         env = os.environ.copy()
         env["OPENCODE_ENABLE_EXA"] = "1"
+        if self.env_vars:
+            env.update(self.env_vars)
+            logger.info(f"Applied custom env vars: {list(self.env_vars.keys())}")
 
         try:
             self._process = await asyncio.create_subprocess_exec(

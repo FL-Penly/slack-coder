@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Dict, Optional
 
 from config.v2_config import V2Config, SlackConfig
 
@@ -27,7 +27,8 @@ class OpenCodeCompatConfig:
     binary: str
     port: int
     request_timeout_seconds: int
-    error_retry_limit: int = 1  # Max retries on LLM stream errors (0 = no retry)
+    error_retry_limit: int = 1
+    env_vars: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -61,6 +62,7 @@ def to_app_config(v2: V2Config) -> AppCompatConfig:
             port=4096,
             request_timeout_seconds=60,
             error_retry_limit=v2.agents.opencode.error_retry_limit,
+            env_vars=v2.agents.opencode.env_vars or {},
         )
     slack = SlackConfig(**v2.slack.__dict__)
     return AppCompatConfig(

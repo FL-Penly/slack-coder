@@ -105,7 +105,9 @@ class SettingsHandler:
             display_names = self.settings_manager.get_message_type_display_names()
 
             # Get current require_mention override for this channel
-            current_require_mention = self.settings_manager.get_require_mention_override(settings_key)
+            current_require_mention = (
+                self.settings_manager.get_require_mention_override(settings_key)
+            )
             global_require_mention = self.config.slack.require_mention
 
             try:
@@ -242,7 +244,10 @@ class SettingsHandler:
                 items=[
                     ("Real-time", f"Messages are immediately sent to {agent_label}"),
                     ("Persistent", "Each chat maintains its own conversation context"),
-                    ("Commands", "Use @Vibe Remote /start for menu, @Vibe Remote /clear to reset session"),
+                    (
+                        "Commands",
+                        "Use @Vibe Remote /start for menu, @Vibe Remote /clear to reset session",
+                    ),
                     ("Work Dir", "Change working directory with /set_cwd or via menu"),
                     ("Settings", "Customize message visibility in Settings"),
                 ],
@@ -310,15 +315,15 @@ class SettingsHandler:
 
         # Get registered backends, prioritize opencode first
         all_backends = list(self.controller.agent_service.agents.keys())
-        registered_backends = sorted(
-            all_backends, key=lambda x: (x != "opencode", x)
-        )
+        registered_backends = sorted(all_backends, key=lambda x: (x != "opencode", x))
 
         # Get current backend (from routing or default)
         current_backend = self.controller.resolve_agent_for_context(context)
 
         # Get current require_mention override for this channel
-        current_require_mention = self.settings_manager.get_require_mention_override(settings_key)
+        current_require_mention = self.settings_manager.get_require_mention_override(
+            settings_key
+        )
         global_require_mention = self.config.slack.require_mention
 
         # Get OpenCode agents/models if available
@@ -341,6 +346,8 @@ class SettingsHandler:
             except Exception as e:
                 logger.warning(f"Failed to fetch OpenCode data: {e}")
 
+        current_env_vars = self.controller._get_opencode_env_vars()
+
         # Open modal
         try:
             await self.im_client.open_routing_modal(
@@ -354,6 +361,7 @@ class SettingsHandler:
                 opencode_default_config=opencode_default_config,
                 current_require_mention=current_require_mention,
                 global_require_mention=global_require_mention,
+                current_env_vars=current_env_vars,
             )
         except Exception as e:
             logger.error(f"Error opening routing modal: {e}", exc_info=True)

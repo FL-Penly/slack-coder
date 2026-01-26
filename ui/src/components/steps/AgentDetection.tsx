@@ -14,6 +14,7 @@ type AgentState = {
   enabled: boolean;
   cli_path: string;
   status?: 'unknown' | 'ok' | 'missing';
+  env_vars?: Record<string, string>;
 };
 
 type PermissionState = 'idle' | 'loading' | 'success' | 'error';
@@ -25,11 +26,13 @@ export const AgentDetection: React.FC<AgentDetectionProps> = ({ data, onNext, on
   const [defaultBackend, setDefaultBackend] = useState<string>(data.default_backend || 'opencode');
   const [agents, setAgents] = useState<Record<string, AgentState>>(
     data.agents || {
-      opencode: { enabled: true, cli_path: 'opencode', status: 'unknown' },
+      opencode: { enabled: true, cli_path: 'opencode', status: 'unknown', env_vars: {} },
       claude: { enabled: true, cli_path: 'claude', status: 'unknown' },
       codex: { enabled: false, cli_path: 'codex', status: 'unknown' },
     }
   );
+  const [newEnvKey, setNewEnvKey] = useState('');
+  const [newEnvValue, setNewEnvValue] = useState('');
   const [permissionState, setPermissionState] = useState<PermissionState>('idle');
   const [permissionMessage, setPermissionMessage] = useState<string>('');
 
@@ -194,6 +197,70 @@ export const AgentDetection: React.FC<AgentDetectionProps> = ({ data, onNext, on
                     {permissionState === 'error' && (
                       <span className="text-sm text-red-600">{permissionMessage}</span>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {name === 'opencode' && (
+                <div className="mt-3 p-3 bg-bg border border-border rounded-lg">
+                  <label className="text-xs font-medium text-muted uppercase mb-2 block">{t('agentDetection.envVars')}</label>
+                  <p className="text-xs text-muted mb-3">{t('agentDetection.envVarsHint')}</p>
+                  
+                  {Object.entries(agent.env_vars || {}).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2 mb-2">
+                      <span className="font-mono text-sm bg-neutral-100 px-2 py-1 rounded">{key}</span>
+                      <span className="text-muted">=</span>
+                      <span className="font-mono text-sm bg-neutral-100 px-2 py-1 rounded flex-1 truncate">{value}</span>
+                      <button
+                        onClick={() => {
+                          const newEnvVars = { ...agent.env_vars };
+                          delete newEnvVars[key];
+                          setAgents(prev => ({
+                            ...prev,
+                            opencode: { ...prev.opencode, env_vars: newEnvVars }
+                          }));
+                        }}
+                        className="text-danger hover:text-danger/80 p-1"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      type="text"
+                      value={newEnvKey}
+                      onChange={(e) => setNewEnvKey(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                      placeholder={t('agentDetection.envKeyPlaceholder')}
+                      className="w-1/3 bg-bg border border-border rounded px-2 py-1.5 text-sm font-mono"
+                    />
+                    <input
+                      type="text"
+                      value={newEnvValue}
+                      onChange={(e) => setNewEnvValue(e.target.value)}
+                      placeholder={t('agentDetection.envValuePlaceholder')}
+                      className="flex-1 bg-bg border border-border rounded px-2 py-1.5 text-sm font-mono"
+                    />
+                    <button
+                      onClick={() => {
+                        if (newEnvKey && newEnvValue) {
+                          setAgents(prev => ({
+                            ...prev,
+                            opencode: {
+                              ...prev.opencode,
+                              env_vars: { ...(prev.opencode.env_vars || {}), [newEnvKey]: newEnvValue }
+                            }
+                          }));
+                          setNewEnvKey('');
+                          setNewEnvValue('');
+                        }
+                      }}
+                      disabled={!newEnvKey || !newEnvValue}
+                      className="px-3 py-1.5 bg-accent hover:bg-accent/90 text-white rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {t('common.add')}
+                    </button>
                   </div>
                 </div>
               )}

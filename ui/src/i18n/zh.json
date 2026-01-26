@@ -34,7 +34,8 @@
     "editSetup": "编辑设置",
     "manageChannels": "管理频道",
     "viewLogs": "查看日志",
-    "saveAndRestart": "保存并重启"
+    "saveAndRestart": "保存并重启",
+    "add": "添加"
   },
   "nav": {
     "dashboard": "仪表盘",
@@ -118,7 +119,11 @@
     "cliPathDetection": "CLI 路径检测和启用设置",
     "recommended": "（推荐）",
     "permissionHint": "OpenCode 需要配置权限以跳过审批提示。",
-    "setupPermission": "一键设置权限"
+    "setupPermission": "一键设置权限",
+    "envVars": "环境变量",
+    "envVarsHint": "传递给 OpenCode 的自定义环境变量（如 GOOGLE_CLOUD_PROJECT、VERTEX_LOCATION 用于 Vertex AI）。",
+    "envKeyPlaceholder": "变量名",
+    "envValuePlaceholder": "值"
   },
   "channelList": {
     "title": "频道设置",

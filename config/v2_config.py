@@ -49,7 +49,6 @@ class RuntimeConfig:
     log_level: str = "INFO"
 
 
-
 @dataclass
 class OpenCodeConfig:
     enabled: bool = True
@@ -58,6 +57,9 @@ class OpenCodeConfig:
     default_model: Optional[str] = None
     default_reasoning_effort: Optional[str] = None
     error_retry_limit: int = 1  # Max retries on LLM stream errors (0 = no retry)
+    env_vars: dict = field(
+        default_factory=dict
+    )  # Custom environment variables for OpenCode
 
 
 @dataclass
@@ -92,6 +94,7 @@ class UiConfig:
 @dataclass
 class UpdateConfig:
     """Configuration for automatic update checking and installation."""
+
     auto_update: bool = True  # Auto-install updates when idle
     check_interval_minutes: int = 60  # How often to check for updates (0 = disable)
     idle_minutes: int = 30  # Minutes of inactivity before auto-update
@@ -141,12 +144,18 @@ class V2Config:
         gateway_payload = payload.get("gateway")
         if gateway_payload is not None and not isinstance(gateway_payload, dict):
             raise ValueError("Config 'gateway' must be an object")
-        gateway = GatewayConfig(**_filter_dataclass_fields(GatewayConfig, gateway_payload)) if gateway_payload else None
+        gateway = (
+            GatewayConfig(**_filter_dataclass_fields(GatewayConfig, gateway_payload))
+            if gateway_payload
+            else None
+        )
 
         runtime_payload = payload.get("runtime")
         if not isinstance(runtime_payload, dict):
             raise ValueError("Config 'runtime' must be an object")
-        runtime = RuntimeConfig(**_filter_dataclass_fields(RuntimeConfig, runtime_payload))
+        runtime = RuntimeConfig(
+            **_filter_dataclass_fields(RuntimeConfig, runtime_payload)
+        )
 
         agents_payload = payload.get("agents")
         if not isinstance(agents_payload, dict):
@@ -164,13 +173,17 @@ class V2Config:
         if not isinstance(codex_payload, dict):
             raise ValueError("Config 'agents.codex' must be an object")
 
-        opencode = OpenCodeConfig(**_filter_dataclass_fields(OpenCodeConfig, opencode_payload))
+        opencode = OpenCodeConfig(
+            **_filter_dataclass_fields(OpenCodeConfig, opencode_payload)
+        )
         claude = ClaudeConfig(**_filter_dataclass_fields(ClaudeConfig, claude_payload))
         codex = CodexConfig(**_filter_dataclass_fields(CodexConfig, codex_payload))
 
         default_backend = agents_payload.get("default_backend", "opencode")
         if default_backend not in {"opencode", "claude", "codex"}:
-            raise ValueError("Config 'agents.default_backend' must be 'opencode', 'claude', or 'codex'")
+            raise ValueError(
+                "Config 'agents.default_backend' must be 'opencode', 'claude', or 'codex'"
+            )
 
         agents = AgentsConfig(
             default_backend=default_backend,

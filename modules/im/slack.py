@@ -632,8 +632,10 @@ class SlackBot(BaseIMClient):
                     await handler(context, args)
                     return
 
-            # Handle as regular message
             if self.on_message_callback:
+                logger.info(
+                    f"Processing message event: channel={channel_id}, thread={thread_id}, ts={event.get('ts')}, text='{text[:50]}...'"
+                )
                 await self.on_message_callback(context, text)
 
         elif event_type == "app_mention":
@@ -1056,7 +1058,21 @@ class SlackBot(BaseIMClient):
             else:
                 require_mention = None
 
-            # Update routing via callback
+            env_vars_data = values.get("opencode_env_vars_block", {}).get(
+                "opencode_env_vars_input", {}
+            )
+            env_vars_text = env_vars_data.get("value", "") or ""
+            env_vars: Dict[str, str] = {}
+            for line in env_vars_text.strip().split("\n"):
+                line = line.strip()
+                if not line or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip()
+                if key:
+                    env_vars[key] = value
+
             if hasattr(self, "_on_routing_update"):
                 await self._on_routing_update(
                     user_id,
@@ -1066,6 +1082,7 @@ class SlackBot(BaseIMClient):
                     oc_model,
                     oc_reasoning,
                     require_mention,
+                    env_vars,
                 )
 
     def run(self):
@@ -1699,6 +1716,7 @@ class SlackBot(BaseIMClient):
         selected_opencode_reasoning: object = _UNSET,
         current_require_mention: object = _UNSET,  # None=default, True, False
         global_require_mention: bool = False,
+        current_env_vars: Optional[Dict[str, str]] = None,
     ) -> dict:
         """Build modal view for agent/model routing settings."""
         # Build backend options
@@ -2163,6 +2181,53 @@ class SlackBot(BaseIMClient):
                 ]
             )
 
+            env_vars_str = ""
+            if current_env_vars:
+                env_vars_str = "\n".join(
+                    f"{k}={v}" for k, v in current_env_vars.items()
+                )
+
+            blocks.extend(
+                [
+                    {"type": "divider"},
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "*Environment Variables* (for Vertex AI, etc.)",
+                        },
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "opencode_env_vars_block",
+                        "optional": True,
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "opencode_env_vars_input",
+                            "multiline": True,
+                            "placeholder": {
+                                "type": "plain_text",
+                                "text": "GOOGLE_CLOUD_PROJECT=your-project\nVERTEX_LOCATION=us-east5",
+                            },
+                            "initial_value": env_vars_str,
+                        },
+                        "label": {
+                            "type": "plain_text",
+                            "text": "Environment Variables (KEY=VALUE, one per line)",
+                        },
+                    },
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": "_⚠️ Changes require OpenCode restart to take effect._",
+                            }
+                        ],
+                    },
+                ]
+            )
+
         # Add tip
         blocks.append(
             {
@@ -2307,8 +2372,8 @@ class SlackBot(BaseIMClient):
         opencode_default_config: dict,
         current_require_mention: object = None,  # None=default, True, False
         global_require_mention: bool = False,
+        current_env_vars: Optional[Dict[str, str]] = None,
     ):
-        """Open a modal dialog for agent/model routing settings"""
         self._ensure_clients()
 
         view = self._build_routing_modal_view(
@@ -2321,6 +2386,7 @@ class SlackBot(BaseIMClient):
             opencode_default_config=opencode_default_config,
             current_require_mention=current_require_mention,
             global_require_mention=global_require_mention,
+            current_env_vars=current_env_vars,
         )
 
         try:
@@ -2346,8 +2412,8 @@ class SlackBot(BaseIMClient):
         selected_opencode_reasoning: Optional[str] = None,
         current_require_mention: object = None,
         global_require_mention: bool = False,
+        current_env_vars: Optional[Dict[str, str]] = None,
     ) -> None:
-        """Update routing modal when selections change."""
         self._ensure_clients()
 
         view = self._build_routing_modal_view(
@@ -2364,6 +2430,7 @@ class SlackBot(BaseIMClient):
             selected_opencode_reasoning=selected_opencode_reasoning,
             current_require_mention=current_require_mention,
             global_require_mention=global_require_mention,
+            current_env_vars=current_env_vars,
         )
 
         try:

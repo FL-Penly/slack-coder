@@ -19,9 +19,11 @@ class OpenCodeClientManager:
     async def get_server(self) -> OpenCodeServerManager:
         async with self._lock:
             if self._server_manager is None:
+                env_vars = getattr(self._config, "env_vars", None)
                 self._server_manager = await OpenCodeServerManager.get_instance(
                     binary=self._config.binary,
                     port=self._config.port,
                     request_timeout_seconds=self._config.request_timeout_seconds,
+                    env_vars=env_vars,
                 )
             return self._server_manager
