@@ -33,7 +33,9 @@ class OpenCodeSessionManager:
         self._session_locks: Dict[str, asyncio.Lock] = {}
         self._initialized_sessions: set[str] = set()
 
-    def get_request_session(self, base_session_id: str) -> Optional[RequestSessionTuple]:
+    def get_request_session(
+        self, base_session_id: str
+    ) -> Optional[RequestSessionTuple]:
         return self._request_sessions.get(base_session_id)
 
     def set_request_session(
@@ -49,10 +51,14 @@ class OpenCodeSessionManager:
             settings_key,
         )
 
-    def pop_request_session(self, base_session_id: str) -> Optional[RequestSessionTuple]:
+    def pop_request_session(
+        self, base_session_id: str
+    ) -> Optional[RequestSessionTuple]:
         return self._request_sessions.pop(base_session_id, None)
 
-    def pop_all_for_settings_key(self, settings_key: str) -> Dict[str, RequestSessionTuple]:
+    def pop_all_for_settings_key(
+        self, settings_key: str
+    ) -> Dict[str, RequestSessionTuple]:
         matches: Dict[str, RequestSessionTuple] = {}
         for base_id, info in list(self._request_sessions.items()):
             if len(info) >= 3 and info[2] == settings_key:
@@ -115,10 +121,39 @@ class OpenCodeSessionManager:
         if not os.path.exists(working_path):
             os.makedirs(working_path, exist_ok=True)
 
+    def _generate_session_title(self, message: str) -> str:
+        if not message:
+            return "New session"
+        title = message.strip()[:50]
+        if len(message) > 50:
+            title += "..."
+        return title
+
     async def get_or_create_session_id(
         self, request: AgentRequest, server: OpenCodeServerManager
     ) -> Optional[str]:
-        """Get a cached OpenCode session id, or create a new session."""
+        """Get a cached OpenCode session id, create a new one, or resume an existing one."""
+
+        if request.resume_session_id:
+            logger.info(f"Attempting to resume session: {request.resume_session_id}")
+            existing = await server.get_session(
+                request.resume_session_id, request.working_path
+            )
+            if existing:
+                self._settings_manager.set_agent_session_mapping(
+                    request.settings_key,
+                    self._agent_name,
+                    request.base_session_id,
+                    request.resume_session_id,
+                )
+                logger.info(
+                    f"Resumed OpenCode session {request.resume_session_id} for {request.base_session_id}"
+                )
+                return request.resume_session_id
+            else:
+                logger.warning(
+                    f"Resume session {request.resume_session_id} not found, will create new session"
+                )
 
         session_id = self._settings_manager.get_agent_session_id(
             request.settings_key,
@@ -128,9 +163,10 @@ class OpenCodeSessionManager:
 
         if not session_id:
             try:
+                title = self._generate_session_title(request.message)
                 session_data = await server.create_session(
                     directory=request.working_path,
-                    title=f"vibe-remote:{request.base_session_id}",
+                    title=title,
                 )
                 session_id = session_data.get("id")
                 if session_id:
@@ -153,9 +189,10 @@ class OpenCodeSessionManager:
             return session_id
 
         try:
+            title = self._generate_session_title(request.message)
             session_data = await server.create_session(
                 directory=request.working_path,
-                title=f"vibe-remote:{request.base_session_id}",
+                title=title,
             )
             new_session_id = session_data.get("id")
             if new_session_id:

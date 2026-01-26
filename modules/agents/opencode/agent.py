@@ -39,7 +39,9 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
         self._session_manager = OpenCodeSessionManager(self.settings_manager, self.name)
 
         self._question_handler = OpenCodeQuestionHandler(
-            self.controller, self.im_client, self.settings_manager,
+            self.controller,
+            self.im_client,
+            self.settings_manager,
             get_server=self._get_server,
         )
         self._poll_loop = OpenCodePollLoop(self, self._question_handler)
@@ -56,7 +58,9 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
 
         async with lock:
             pending = self._question_handler.get_pending(request.base_session_id)
-            is_modal_open = pending and request.message == "opencode_question:open_modal"
+            is_modal_open = (
+                pending and request.message == "opencode_question:open_modal"
+            )
             is_answer_submission = pending and not is_modal_open
 
             existing_task = self._active_requests.get(request.base_session_id)
@@ -108,7 +112,9 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
             elif is_answer_submission:
                 server = await self._get_server()
                 await self._question_handler.process_question_answer(
-                    request, pending, server  # type: ignore[arg-type]
+                    request,
+                    pending,
+                    server,  # type: ignore[arg-type]
                 )
                 return
             else:
@@ -148,7 +154,9 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
         await self._delete_ack(request)
         await self._session_manager.ensure_working_dir(request.working_path)
 
-        session_id = await self._session_manager.get_or_create_session_id(request, server)
+        session_id = await self._session_manager.get_or_create_session_id(
+            request, server
+        )
         if not session_id:
             await self.controller.emit_agent_message(
                 request.context,
@@ -158,7 +166,10 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
             return
 
         self._session_manager.set_request_session(
-            request.base_session_id, session_id, request.working_path, request.settings_key
+            request.base_session_id,
+            session_id,
+            request.working_path,
+            request.settings_key,
         )
 
         if self._session_manager.mark_initialized(session_id):
@@ -172,6 +183,14 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                 parse_mode="markdown",
             )
 
+        stop_button_message_id = None
+        if hasattr(self.controller, "send_processing_message_with_stop_button"):
+            stop_button_message_id = (
+                await self.controller.send_processing_message_with_stop_button(
+                    request.context, "⏳ Processing your request..."
+                )
+            )
+
         try:
             override_agent, override_model, override_reasoning = (
                 self.controller.get_opencode_overrides(request.context)
@@ -183,7 +202,9 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                 override_reasoning = request.subagent_reasoning_effort
 
             if request.subagent_name and not override_model:
-                override_model = server.get_agent_model_from_config(request.subagent_name)
+                override_model = server.get_agent_model_from_config(
+                    request.subagent_name
+                )
             if request.subagent_name and not override_reasoning:
                 override_reasoning = server.get_agent_reasoning_effort_from_config(
                     request.subagent_name
@@ -204,7 +225,9 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
 
             reasoning_effort = override_reasoning
             if not reasoning_effort:
-                reasoning_effort = server.get_agent_reasoning_effort_from_config(agent_to_use)
+                reasoning_effort = server.get_agent_reasoning_effort_from_config(
+                    agent_to_use
+                )
 
             baseline_message_ids: set[str] = set()
             try:
@@ -257,6 +280,13 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                 baseline_message_ids=baseline_message_ids,
             )
 
+            if stop_button_message_id and hasattr(
+                self.controller, "remove_stop_button"
+            ):
+                await self.controller.remove_stop_button(
+                    request.context, stop_button_message_id
+                )
+
             if not should_emit:
                 return
 
@@ -276,20 +306,34 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                     started_at=request.started_at,
                 )
 
-            # Clean up answer reaction after result is sent
             await self._question_handler.clear(request.base_session_id)
             self.settings_manager.remove_active_poll(session_id)
 
         except asyncio.CancelledError:
+            if stop_button_message_id and hasattr(
+                self.controller, "remove_stop_button"
+            ):
+                await self.controller.remove_stop_button(
+                    request.context, stop_button_message_id
+                )
             logger.info(f"OpenCode request cancelled for {request.base_session_id}")
             await self._question_handler.clear(request.base_session_id)
             if session_id:
                 self.settings_manager.remove_active_poll(session_id)
             raise
         except Exception as e:
+            if stop_button_message_id and hasattr(
+                self.controller, "remove_stop_button"
+            ):
+                await self.controller.remove_stop_button(
+                    request.context, stop_button_message_id
+                )
+
             error_name = type(e).__name__
             error_details = str(e).strip()
-            error_text = f"{error_name}: {error_details}" if error_details else error_name
+            error_text = (
+                f"{error_name}: {error_details}" if error_details else error_name
+            )
 
             logger.error(f"OpenCode request failed: {error_text}", exc_info=True)
             try:
@@ -299,7 +343,6 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                     f"Failed to abort OpenCode session after error: {abort_err}"
                 )
 
-            # Clean up answer reaction on error
             await self._question_handler.clear(request.base_session_id)
             if session_id:
                 self.settings_manager.remove_active_poll(session_id)
@@ -409,7 +452,9 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                     break
                 last_assistant_finish = info.get("finish")
 
-            session_still_active = has_in_progress or last_assistant_finish == "tool-calls"
+            session_still_active = (
+                has_in_progress or last_assistant_finish == "tool-calls"
+            )
             if not session_still_active:
                 logger.info(
                     f"OpenCode session {session_id} has completed, removing from active polls"
@@ -422,7 +467,9 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                 f"(thread={poll_info.base_session_id}, cwd={poll_info.working_path})"
             )
 
-            task = asyncio.create_task(self._poll_loop.run_restored_poll_loop(poll_info))
+            task = asyncio.create_task(
+                self._poll_loop.run_restored_poll_loop(poll_info)
+            )
             self._active_requests[poll_info.base_session_id] = task
             self._session_manager.set_request_session(
                 poll_info.base_session_id,

@@ -1,12 +1,15 @@
 """Message routing and Agent communication handlers"""
 
 import logging
-from typing import Optional
+import re
+from typing import Optional, Tuple
 
 from modules.agents import AgentRequest
 from modules.im import MessageContext
 
 logger = logging.getLogger(__name__)
+
+RESUME_PATTERN = re.compile(r"^/resume\s+([a-zA-Z0-9_-]+)\s*(.*)", re.DOTALL)
 
 
 class MessageHandler:
@@ -48,7 +51,7 @@ class MessageHandler:
         """Process regular user messages and route to configured agent"""
         try:
             # Record user activity for auto-update idle detection
-            if hasattr(self.controller, 'update_checker'):
+            if hasattr(self.controller, "update_checker"):
                 self.controller.update_checker.record_activity()
 
             # If message is empty (e.g., user just @mentioned bot without text),
@@ -99,6 +102,37 @@ class MessageHandler:
             subagent_name = None
             subagent_model = None
             subagent_reasoning_effort = None
+            resume_session_id = None
+
+            resume_match = RESUME_PATTERN.match(message)
+            if resume_match:
+                resume_session_id = resume_match.group(1)
+                remaining_message = resume_match.group(2).strip()
+                logger.info(f"Resuming session: {resume_session_id}")
+
+                if not remaining_message:
+                    settings_key = self._get_settings_key(context)
+                    base_session_id, working_path, _ = (
+                        self.session_handler.get_session_info(context)
+                    )
+
+                    self.settings_manager.set_agent_session_mapping(
+                        settings_key,
+                        "opencode",
+                        base_session_id,
+                        resume_session_id,
+                    )
+
+                    await self.im_client.send_message(
+                        context,
+                        f"✅ Session resumed: `{resume_session_id}`\n\n"
+                        f"📁 Directory: `{working_path}`\n\n"
+                        "💬 You can now continue the conversation in this thread.",
+                        parse_mode="markdown",
+                    )
+                    return
+
+                message = remaining_message
 
             if agent_name in ["opencode", "claude"]:
                 from modules.agents.subagent_router import (
@@ -112,8 +146,12 @@ class MessageHandler:
                     normalized = normalize_subagent_name(parsed.name)
                     if agent_name == "opencode":
                         try:
-                            opencode_agent = self.controller.agent_service.agents.get("opencode")
-                            if opencode_agent and hasattr(opencode_agent, "_get_server"):
+                            opencode_agent = self.controller.agent_service.agents.get(
+                                "opencode"
+                            )
+                            if opencode_agent and hasattr(
+                                opencode_agent, "_get_server"
+                            ):
                                 server = await opencode_agent._get_server()
                                 await server.ensure_running()
                                 opencode_agents = await server.get_available_agents(
@@ -128,14 +166,18 @@ class MessageHandler:
                                 if match:
                                     subagent_name = match.get("name")
                         except Exception as err:
-                            logger.warning(f"Failed to resolve OpenCode subagent: {err}")
+                            logger.warning(
+                                f"Failed to resolve OpenCode subagent: {err}"
+                            )
                     else:
                         try:
                             subagent_def = load_claude_subagent(normalized)
                             if subagent_def:
                                 subagent_name = subagent_def.name
                                 subagent_model = subagent_def.model
-                                subagent_reasoning_effort = subagent_def.reasoning_effort
+                                subagent_reasoning_effort = (
+                                    subagent_def.reasoning_effort
+                                )
                         except Exception as err:
                             logger.warning(f"Failed to resolve Claude subagent: {err}")
 
@@ -199,7 +241,6 @@ class MessageHandler:
                             f"Failed to remove reaction ack for subagent: {err}"
                         )
 
-
             request = AgentRequest(
                 context=context,
                 message=message,
@@ -212,6 +253,7 @@ class MessageHandler:
                 subagent_key=matched_prefix,
                 subagent_model=subagent_model,
                 subagent_reasoning_effort=subagent_reasoning_effort,
+                resume_session_id=resume_session_id,
             )
             try:
                 await self.controller.agent_service.handle_message(agent_name, request)
@@ -283,6 +325,13 @@ class MessageHandler:
 
             elif callback_data == "cmd_routing":
                 await settings_handler.handle_routing(context)
+
+            elif callback_data == "cmd_stop":
+                handled = await self._handle_inline_stop(context)
+                if not handled:
+                    await self.im_client.send_message(
+                        context, "ℹ️ No active session to stop."
+                    )
 
             elif (
                 callback_data.startswith("info_") and callback_data != "info_msg_types"

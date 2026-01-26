@@ -25,6 +25,7 @@ class AgentRequest:
     subagent_key: Optional[str] = None
     subagent_model: Optional[str] = None
     subagent_reasoning_effort: Optional[str] = None
+    resume_session_id: Optional[str] = None
     last_agent_message: Optional[str] = None
     last_agent_message_parse_mode: Optional[str] = None
     started_at: float = field(default_factory=time.monotonic)

@@ -800,3 +800,23 @@ class OpenCodeServerManager:
         # Default to "build" agent which uses the agent's configured model,
         # avoiding fallback to global model which may use restricted credentials.
         return "build"
+
+    async def list_sessions(self, directory: str) -> List[Dict[str, Any]]:
+        """List all sessions for a directory.
+
+        Returns:
+            List of session dicts with 'id', 'title', 'createdAt', etc.
+        """
+        session = await self._get_http_session()
+        try:
+            async with session.get(
+                f"{self.base_url}/session",
+                headers={"x-opencode-directory": directory},
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data if isinstance(data, list) else []
+                return []
+        except Exception as e:
+            logger.warning(f"Failed to list sessions: {e}")
+            return []

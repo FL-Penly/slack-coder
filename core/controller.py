@@ -56,7 +56,8 @@ class Controller:
 
         # Initialize update checker (use default config if not present)
         from config.v2_config import UpdateConfig
-        update_config = getattr(config, 'update', None) or UpdateConfig()
+
+        update_config = getattr(config, "update", None) or UpdateConfig()
         self.update_checker = UpdateChecker(self, update_config)
 
         # Restore session mappings on startup (after handlers are initialized)
@@ -93,6 +94,7 @@ class Controller:
         if self.config.platform == "slack":
             # Import here to avoid circular dependency
             from modules.im.slack import SlackBot
+
             if isinstance(self.im_client, SlackBot):
                 self.im_client.set_settings_manager(self.settings_manager)
                 self.im_client.set_controller(self)
@@ -133,6 +135,8 @@ class Controller:
             "set_cwd": self.command_handler.handle_set_cwd,
             "settings": self.settings_handler.handle_settings,
             "stop": self.command_handler.handle_stop,
+            "sessions": self.command_handler.handle_sessions,
+            "diff": self.command_handler.handle_diff,
         }
 
         # Register callbacks with the IM client
@@ -192,7 +196,9 @@ class Controller:
                 logger.info(f"Created custom CWD: {abs_path}")
                 return abs_path
             except OSError as e:
-                logger.warning(f"Failed to create custom CWD '{abs_path}': {e}, using default")
+                logger.warning(
+                    f"Failed to create custom CWD '{abs_path}': {e}, using default"
+                )
 
         # Fall back to default from config.json
         default_cwd = self.config.claude.cwd
@@ -249,7 +255,9 @@ class Controller:
         # Build key with the original trigger message_id if provided
         settings_key = self._get_settings_key(context)
         thread_key = context.thread_id or context.channel_id
-        msg_id = trigger_message_id if trigger_message_id else (context.message_id or "")
+        msg_id = (
+            trigger_message_id if trigger_message_id else (context.message_id or "")
+        )
         key = f"{settings_key}:{thread_key}:{msg_id}"
 
         # Use the same per-key lock as emit_agent_message to avoid race conditions
@@ -389,7 +397,9 @@ class Controller:
                 target_context, summary, parse_mode=parse_mode
             )
 
-            if self.config.platform == "slack" and hasattr(self.im_client, "upload_markdown"):
+            if self.config.platform == "slack" and hasattr(
+                self.im_client, "upload_markdown"
+            ):
                 try:
                     await self.im_client.upload_markdown(
                         target_context,
@@ -438,7 +448,10 @@ class Controller:
             continuation_bytes = self._get_text_byte_length(continuation_notice)
 
             # Case 1: Accumulated message exceeds threshold (in bytes), split off old message
-            if existing_message_id and self._get_text_byte_length(updated) > split_threshold:
+            if (
+                existing_message_id
+                and self._get_text_byte_length(updated) > split_threshold
+            ):
                 old_text = existing + continuation_notice
                 old_text = self._truncate_consolidated(old_text, max_bytes)
 
@@ -468,7 +481,9 @@ class Controller:
                 # Find split point that fits within threshold (accounting for continuation notice)
                 target_bytes = split_threshold - continuation_bytes
                 first_part = self._truncate_consolidated(updated, target_bytes)
-                first_part = first_part.rstrip("…") + continuation_notice  # Replace truncation marker
+                first_part = (
+                    first_part.rstrip("…") + continuation_notice
+                )  # Replace truncation marker
 
                 send_ok = False
                 if existing_message_id:
@@ -493,7 +508,9 @@ class Controller:
 
                 if not send_ok:
                     # Failed to send/edit - stop splitting and truncate the remainder
-                    logger.warning("Stopping split loop due to send failure, truncating remainder")
+                    logger.warning(
+                        "Stopping split loop due to send failure, truncating remainder"
+                    )
                     break
 
                 # Continue with remainder (skip the part we already sent)
@@ -534,9 +551,51 @@ class Controller:
             except Exception as err:
                 logger.error(f"Failed to send Log Message: {err}", exc_info=True)
 
+    async def send_processing_message_with_stop_button(
+        self,
+        context: MessageContext,
+        text: str = "⏳ Processing...",
+    ) -> Optional[str]:
+        from modules.im.base import InlineKeyboard, InlineButton
+
+        target_context = self._get_target_context(context)
+        keyboard = InlineKeyboard(
+            buttons=[[InlineButton(text="🛑 Stop", callback_data="cmd_stop")]]
+        )
+
+        try:
+            if hasattr(self.im_client, "send_message_with_buttons"):
+                message_id = await self.im_client.send_message_with_buttons(
+                    target_context, text, keyboard, parse_mode="markdown"
+                )
+                return message_id
+        except Exception as err:
+            logger.warning(f"Failed to send processing message with stop button: {err}")
+
+        return None
+
+    async def remove_stop_button(
+        self,
+        context: MessageContext,
+        message_id: str,
+        new_text: Optional[str] = None,
+    ) -> bool:
+        target_context = self._get_target_context(context)
+        try:
+            if hasattr(self.im_client, "remove_inline_keyboard"):
+                return await self.im_client.remove_inline_keyboard(
+                    target_context, message_id, text=new_text, parse_mode="markdown"
+                )
+        except Exception as err:
+            logger.debug(f"Failed to remove stop button: {err}")
+        return False
+
     # Settings update handler (for Slack modal)
     async def handle_settings_update(
-        self, user_id: str, show_message_types: list, channel_id: Optional[str] = None,
+        self,
+        user_id: str,
+        show_message_types: list,
+        channel_id: Optional[str] = None,
         require_mention: Optional[bool] = None,
     ):
         """Handle settings update (typically from Slack modal)"""
@@ -894,6 +953,7 @@ class Controller:
         # Stop OpenCode server if running
         try:
             from modules.agents.opencode import OpenCodeServerManager
+
             OpenCodeServerManager.stop_instance_sync()
         except Exception as e:
             logger.debug(f"OpenCode server cleanup skipped: {e}")

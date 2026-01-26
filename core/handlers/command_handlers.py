@@ -1,5 +1,6 @@
 """Command handlers for bot commands like /start, /clear, /cwd, etc."""
 
+import asyncio
 import os
 import logging
 from typing import Optional
@@ -78,10 +79,18 @@ class CommandHandlers:
                 "",
                 formatter.format_bold("Commands:"),
                 formatter.format_text("@Vibe Remote /start - Show this message"),
-                formatter.format_text("@Vibe Remote /clear - Reset session and start fresh"),
-                formatter.format_text("@Vibe Remote /cwd - Show current working directory"),
-                formatter.format_text("@Vibe Remote /set_cwd <path> - Set working directory"),
-                formatter.format_text("@Vibe Remote /settings - Personalization settings"),
+                formatter.format_text(
+                    "@Vibe Remote /clear - Reset session and start fresh"
+                ),
+                formatter.format_text(
+                    "@Vibe Remote /cwd - Show current working directory"
+                ),
+                formatter.format_text(
+                    "@Vibe Remote /set_cwd <path> - Set working directory"
+                ),
+                formatter.format_text(
+                    "@Vibe Remote /settings - Personalization settings"
+                ),
                 formatter.format_text(
                     f"@Vibe Remote /stop - Interrupt {agent_display_name} execution"
                 ),
@@ -129,7 +138,7 @@ class CommandHandlers:
 👋 Hello **{user_name}**!
 🔧 Platform: **{platform_name}**
 🤖 Agent: **{agent_display_name}**
-📍 Channel: **{channel_info.get('name', 'Unknown')}**
+📍 Channel: **{channel_info.get("name", "Unknown")}**
 
 **Quick Actions:**
 Use the buttons below to manage your {agent_display_name} sessions, or simply type any message to start chatting with {agent_display_name}!"""
@@ -153,10 +162,12 @@ Use the buttons below to manage your {agent_display_name} sessions, or simply ty
                 )
             else:
                 details = "\n".join(
-                    f"• {agent} → {count} session(s)" for agent, count in cleared.items()
+                    f"• {agent} → {count} session(s)"
+                    for agent, count in cleared.items()
                 )
                 full_response = (
-                    "✅ Cleared active sessions for:\n" f"{details}\n🔄 All sessions reset."
+                    "✅ Cleared active sessions for:\n"
+                    f"{details}\n🔄 All sessions reset."
                 )
 
             channel_context = self._get_channel_context(context)
@@ -339,4 +350,169 @@ Use the buttons below to manage your {agent_display_name} sessions, or simply ty
             await self.im_client.send_message(
                 context,  # Use original context
                 f"❌ Error sending stop command: {str(e)}",
+            )
+
+    async def handle_sessions(self, context: MessageContext, args: str = ""):
+        try:
+            channel_context = self._get_channel_context(context)
+            working_path = self.controller.get_cwd(context)
+
+            opencode_agent = self.controller.agent_service.agents.get("opencode")
+            if not opencode_agent:
+                await self.im_client.send_message(
+                    channel_context, "❌ OpenCode agent is not enabled."
+                )
+                return
+
+            server = await opencode_agent._get_server()
+            await server.ensure_running()
+            sessions = await server.list_sessions(working_path)
+
+            if not sessions:
+                await self.im_client.send_message(
+                    channel_context,
+                    f"📋 No OpenCode sessions found for:\n`{working_path}`\n\n"
+                    "💡 Start a new conversation to create a session.",
+                )
+                return
+
+            lines = [
+                f"📋 **OpenCode Sessions** ({len(sessions)} found)",
+                f"📁 Directory: `{working_path}`",
+                "",
+            ]
+
+            max_display = 10
+            for i, session in enumerate(sessions[:max_display], 1):
+                session_id = session.get("id", "unknown")
+                title = session.get("title", "")
+                time_info = session.get("time", {})
+                created_ts = time_info.get("created", 0)
+                updated_ts = time_info.get("updated", 0)
+
+                if title.startswith("vibe-remote:"):
+                    title = ""
+
+                from datetime import datetime
+
+                if updated_ts:
+                    updated_str = datetime.fromtimestamp(updated_ts / 1000).strftime(
+                        "%Y-%m-%d %H:%M"
+                    )
+                elif created_ts:
+                    updated_str = datetime.fromtimestamp(created_ts / 1000).strftime(
+                        "%Y-%m-%d %H:%M"
+                    )
+                else:
+                    updated_str = ""
+
+                lines.append(f"**{i}.** `{session_id}`")
+                if title:
+                    lines.append(f"   📝 {title}")
+                if updated_str:
+                    lines.append(f"   🕐 {updated_str}")
+                lines.append("")
+
+            if len(sessions) > max_display:
+                lines.append(f"_...and {len(sessions) - max_display} more sessions_")
+
+            lines.append("")
+            lines.append("💡 **To resume a session**, use:")
+            lines.append("`/resume <session_id> your message`")
+
+            await self.im_client.send_message(
+                channel_context, "\n".join(lines), parse_mode="markdown"
+            )
+
+        except Exception as e:
+            logger.error(f"Error listing sessions: {e}", exc_info=True)
+            channel_context = self._get_channel_context(context)
+            await self.im_client.send_message(
+                channel_context, f"❌ Error listing sessions: {str(e)}"
+            )
+
+    async def handle_diff(self, context: MessageContext, args: str = ""):
+        try:
+            channel_context = self._get_channel_context(context)
+            working_path = self.controller.get_cwd(context)
+
+            if not os.path.isdir(os.path.join(working_path, ".git")):
+                await self.im_client.send_message(
+                    channel_context,
+                    f"❌ Not a git repository: `{working_path}`\n\n"
+                    "The `/diff` command requires a git repository.",
+                )
+                return
+
+            process = await asyncio.create_subprocess_exec(
+                "git",
+                "diff",
+                "--stat",
+                cwd=working_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stat_stdout, stat_stderr = await process.communicate()
+
+            if process.returncode != 0:
+                error_msg = stat_stderr.decode("utf-8", errors="replace").strip()
+                await self.im_client.send_message(
+                    channel_context, f"❌ Git diff failed: {error_msg}"
+                )
+                return
+
+            stat_output = stat_stdout.decode("utf-8", errors="replace").strip()
+
+            if not stat_output:
+                await self.im_client.send_message(
+                    channel_context,
+                    f"✅ No uncommitted changes in `{working_path}`",
+                )
+                return
+
+            process = await asyncio.create_subprocess_exec(
+                "git",
+                "diff",
+                cwd=working_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            diff_stdout, _ = await process.communicate()
+            diff_output = diff_stdout.decode("utf-8", errors="replace")
+
+            summary_lines = [
+                "📊 **Git Diff Summary**",
+                f"📁 Directory: `{working_path}`",
+                "",
+                "```",
+                stat_output,
+                "```",
+            ]
+
+            await self.im_client.send_message(
+                channel_context, "\n".join(summary_lines), parse_mode="markdown"
+            )
+
+            if hasattr(self.im_client, "upload_markdown") and len(diff_output) > 100:
+                try:
+                    await self.im_client.upload_markdown(
+                        channel_context,
+                        title="changes.diff",
+                        content=diff_output,
+                        filetype="diff",
+                    )
+                except Exception as upload_err:
+                    logger.warning(f"Failed to upload diff file: {upload_err}")
+                    if len(diff_output) <= 3000:
+                        await self.im_client.send_message(
+                            channel_context,
+                            f"```diff\n{diff_output}\n```",
+                            parse_mode="markdown",
+                        )
+
+        except Exception as e:
+            logger.error(f"Error generating diff: {e}", exc_info=True)
+            channel_context = self._get_channel_context(context)
+            await self.im_client.send_message(
+                channel_context, f"❌ Error generating diff: {str(e)}"
             )
