@@ -116,21 +116,12 @@ class CommandHandlers:
         buttons = [
             [
                 InlineButton(text="📋 恢复会话", callback_data="cmd_resume"),
-                InlineButton(text="🛑 停止执行", callback_data="cmd_stop"),
-            ],
-            [
-                InlineButton(text="📁 当前目录", callback_data="cmd_cwd"),
                 InlineButton(text="📂 切换目录", callback_data="cmd_change_cwd"),
-            ],
-            [
-                InlineButton(text="📊 Git 变更", callback_data="cmd_diff"),
-                InlineButton(text="🔄 清除会话", callback_data="cmd_clear"),
             ],
             [
                 InlineButton(text="🤖 Agent 设置", callback_data="cmd_routing"),
                 InlineButton(text="⚙️ 设置", callback_data="cmd_settings"),
             ],
-            [InlineButton(text="ℹ️ 使用说明", callback_data="info_how_it_works")],
         ]
 
         keyboard = InlineKeyboard(buttons=buttons)
