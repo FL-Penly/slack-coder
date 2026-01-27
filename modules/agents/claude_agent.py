@@ -46,7 +46,7 @@ class ClaudeAgent(BaseAgent):
             claude_model = routing.claude_model if routing else None
             claude_env_vars = routing.claude_env_vars if routing else None
 
-            model_to_use = request.subagent_model or claude_model or "sonnet"
+            model_to_use = request.subagent_model or claude_model or "opus"
 
             client = await self.session_handler.get_or_create_claude_session(
                 context,

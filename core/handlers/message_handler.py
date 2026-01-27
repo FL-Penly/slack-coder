@@ -359,8 +359,14 @@ class MessageHandler:
                 await command_handlers.handle_resume_modal(context)
 
             elif callback_data.startswith("resume_session:"):
-                session_id = callback_data.replace("resume_session:", "")
-                await command_handlers.handle_resume_session(context, session_id)
+                parts = callback_data.replace("resume_session:", "").split(":", 1)
+                if len(parts) == 2:
+                    agent_name, session_id = parts
+                else:
+                    agent_name, session_id = "opencode", parts[0]
+                await command_handlers.handle_resume_session(
+                    context, session_id, agent_name
+                )
 
             elif (
                 callback_data.startswith("info_") and callback_data != "info_msg_types"

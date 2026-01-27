@@ -891,7 +891,17 @@ class SlackBot(BaseIMClient):
                             "value"
                         )
                         if selected_session_id and self.on_callback_query_callback:
-                            channel_from_view = view.get("private_metadata")
+                            private_metadata = view.get("private_metadata", "")
+                            channel_from_view = None
+                            agent_name = "opencode"
+                            try:
+                                import json
+
+                                meta = json.loads(private_metadata)
+                                channel_from_view = meta.get("channel_id")
+                                agent_name = meta.get("agent_name", "opencode")
+                            except (json.JSONDecodeError, TypeError):
+                                channel_from_view = private_metadata
                             context = MessageContext(
                                 user_id=user.get("id"),
                                 channel_id=channel_from_view or channel_id,
@@ -901,7 +911,8 @@ class SlackBot(BaseIMClient):
                                 },
                             )
                             await self.on_callback_query_callback(
-                                context, f"resume_session:{selected_session_id}"
+                                context,
+                                f"resume_session:{agent_name}:{selected_session_id}",
                             )
                     elif action_id in {
                         "backend_select",
@@ -1639,15 +1650,25 @@ class SlackBot(BaseIMClient):
             raise
 
     async def open_sessions_modal(
-        self, trigger_id: str, sessions: list, working_path: str, channel_id: str = None
+        self,
+        trigger_id: str,
+        sessions: list,
+        working_path: str,
+        channel_id: str = None,
+        agent_name: str = "opencode",
     ):
         self._ensure_clients()
+        import json
         from datetime import datetime
 
+        agent_label = "Claude Code" if agent_name == "claude" else "OpenCode"
         blocks = [
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"📁 目录：`{working_path}`"},
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"📁 目录：`{working_path}`\n🤖 Agent：{agent_label}",
+                },
             },
             {"type": "divider"},
         ]
@@ -1667,18 +1688,29 @@ class SlackBot(BaseIMClient):
             for session in sessions[:20]:
                 session_id = session.get("id", "unknown")
                 title = session.get("title", "")
+
+                time_str = ""
                 time_info = session.get("time", {})
                 updated_ts = time_info.get("updated", 0) or time_info.get("created", 0)
-
-                if title.startswith("vibe-remote:"):
-                    title = ""
-
                 if updated_ts:
                     time_str = datetime.fromtimestamp(updated_ts / 1000).strftime(
                         "%m-%d %H:%M"
                     )
                 else:
-                    time_str = ""
+                    modified_iso = session.get("modified", "") or session.get(
+                        "created", ""
+                    )
+                    if modified_iso:
+                        try:
+                            dt = datetime.fromisoformat(
+                                modified_iso.replace("Z", "+00:00")
+                            )
+                            time_str = dt.strftime("%m-%d %H:%M")
+                        except (ValueError, TypeError):
+                            pass
+
+                if title.startswith("vibe-remote:"):
+                    title = ""
 
                 display_text = (
                     f"{time_str} {title}" if title else f"{time_str} {session_id[:16]}"
@@ -1730,10 +1762,13 @@ class SlackBot(BaseIMClient):
                 }
             )
 
+        metadata = json.dumps(
+            {"channel_id": channel_id or "", "agent_name": agent_name}
+        )
         view = {
             "type": "modal",
             "callback_id": "sessions_modal",
-            "private_metadata": channel_id or "",
+            "private_metadata": metadata,
             "title": {"type": "plain_text", "text": "恢复会话"},
             "close": {"type": "plain_text", "text": "关闭"},
             "blocks": blocks,

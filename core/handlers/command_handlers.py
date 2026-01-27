@@ -542,22 +542,30 @@ class CommandHandlers:
                 return
 
             working_path = self.controller.get_cwd(context)
-            opencode_agent = self.controller.agent_service.agents.get("opencode")
+            agent_name = self.controller.resolve_agent_for_context(context)
+            sessions = []
 
-            if not opencode_agent:
+            if agent_name == "claude":
+                from modules.claude_client import ClaudeClient
+
+                sessions = ClaudeClient.list_sessions(working_path)
+            elif agent_name == "opencode":
+                opencode_agent = self.controller.agent_service.agents.get("opencode")
+                if opencode_agent:
+                    server = await opencode_agent._get_server()
+                    await server.ensure_running()
+                    sessions = await server.list_sessions(working_path)
+
+            if not sessions:
                 channel_context = self._get_channel_context(context)
                 await self.im_client.send_message(
-                    channel_context, "❌ OpenCode agent 未启用"
+                    channel_context, f"📭 当前目录没有找到 {agent_name} 的历史会话"
                 )
                 return
 
-            server = await opencode_agent._get_server()
-            await server.ensure_running()
-            sessions = await server.list_sessions(working_path)
-
             if hasattr(self.im_client, "open_sessions_modal"):
                 await self.im_client.open_sessions_modal(
-                    trigger_id, sessions, working_path, context.channel_id
+                    trigger_id, sessions, working_path, context.channel_id, agent_name
                 )
 
         except Exception as e:
@@ -567,83 +575,21 @@ class CommandHandlers:
                 channel_context, f"❌ 获取会话列表失败：{str(e)}"
             )
 
-    async def handle_resume_session(self, context: MessageContext, session_id: str):
+    async def handle_resume_session(
+        self, context: MessageContext, session_id: str, agent_name: str = "opencode"
+    ):
         """Resume a specific session - show history and bind thread"""
         try:
             channel_context = self._get_channel_context(context)
-
-            opencode_agent = self.controller.agent_service.agents.get("opencode")
-            if not opencode_agent:
-                await self.im_client.send_message(
-                    channel_context, "❌ OpenCode agent 未启用"
-                )
-                return
-
             working_path = self.controller.get_cwd(context)
-            server = await opencode_agent._get_server()
-            await server.ensure_running()
 
-            target_session = await server.get_session(session_id, working_path)
-            if not target_session:
-                await self.im_client.send_message(
-                    channel_context, f"❌ 会话不存在：`{session_id}`"
+            if agent_name == "claude":
+                await self._resume_claude_session(
+                    context, channel_context, session_id, working_path
                 )
-                return
-
-            title = target_session.get("title", "")
-            if title.startswith("vibe-remote:"):
-                title = ""
-            display_name = title if title else session_id[:12]
-
-            messages = await server.list_messages(session_id, working_path)
-
-            history_lines = [f"📋 **恢复会话：{display_name}**\n"]
-
-            msg_count = 0
-            for msg in messages[-10:]:
-                info = msg.get("info", {})
-                role = info.get("role", "")
-                parts = msg.get("parts", [])
-                content = ""
-
-                for part in parts:
-                    if part.get("type") == "text":
-                        content = part.get("text", "")
-                        break
-
-                if content and role in ("user", "assistant"):
-                    role_icon = "👤" if role == "user" else "🤖"
-                    content_preview = content.replace("\n", " ")[:100]
-                    if len(content) > 100:
-                        content_preview += "..."
-                    history_lines.append(f"{role_icon} {content_preview}")
-                    msg_count += 1
-
-            if msg_count == 0:
-                history_lines.append("_(暂无历史消息)_")
-
-            history_lines.append("\n---\n💬 **在下方回复继续对话**")
-
-            message_ts = await self.im_client.send_message(
-                channel_context,
-                "\n".join(history_lines),
-                parse_mode="markdown",
-            )
-
-            if message_ts:
-                settings_key = self.controller._get_settings_key(context)
-                base_session_id = f"slack_{message_ts}"
-                self.settings_manager.set_agent_session_mapping(
-                    settings_key,
-                    "opencode",
-                    base_session_id,
-                    session_id,
-                )
-                self.settings_manager.mark_thread_active(
-                    context.user_id, context.channel_id, message_ts
-                )
-                logger.info(
-                    f"Bound thread {message_ts} (base_session_id={base_session_id}) to OpenCode session {session_id}"
+            else:
+                await self._resume_opencode_session(
+                    context, channel_context, session_id, working_path
                 )
 
         except Exception as e:
@@ -652,3 +598,149 @@ class CommandHandlers:
             await self.im_client.send_message(
                 channel_context, f"❌ 恢复会话失败：{str(e)}"
             )
+
+    async def _resume_opencode_session(
+        self,
+        context: MessageContext,
+        channel_context: MessageContext,
+        session_id: str,
+        working_path: str,
+    ):
+        opencode_agent = self.controller.agent_service.agents.get("opencode")
+        if not opencode_agent:
+            await self.im_client.send_message(
+                channel_context, "❌ OpenCode agent 未启用"
+            )
+            return
+
+        server = await opencode_agent._get_server()
+        await server.ensure_running()
+
+        target_session = await server.get_session(session_id, working_path)
+        if not target_session:
+            await self.im_client.send_message(
+                channel_context, f"❌ 会话不存在：`{session_id}`"
+            )
+            return
+
+        title = target_session.get("title", "")
+        if title.startswith("vibe-remote:"):
+            title = ""
+        display_name = title if title else session_id[:12]
+
+        messages = await server.list_messages(session_id, working_path)
+        history_lines = self._format_opencode_history(messages, display_name)
+
+        message_ts = await self.im_client.send_message(
+            channel_context,
+            "\n".join(history_lines),
+            parse_mode="markdown",
+        )
+
+        if message_ts:
+            settings_key = self.controller._get_settings_key(context)
+            base_session_id = f"slack_{message_ts}"
+            self.settings_manager.set_agent_session_mapping(
+                settings_key,
+                "opencode",
+                base_session_id,
+                session_id,
+            )
+            self.settings_manager.mark_thread_active(
+                context.user_id, context.channel_id, message_ts
+            )
+            logger.info(f"Bound thread {message_ts} to OpenCode session {session_id}")
+
+    async def _resume_claude_session(
+        self,
+        context: MessageContext,
+        channel_context: MessageContext,
+        session_id: str,
+        working_path: str,
+    ):
+        from modules.claude_client import ClaudeClient
+
+        target_session = ClaudeClient.get_session(session_id, working_path)
+        if not target_session:
+            await self.im_client.send_message(
+                channel_context, f"❌ 会话不存在：`{session_id}`"
+            )
+            return
+
+        display_name = target_session.get("title", "") or session_id[:12]
+        messages = ClaudeClient.get_session_messages(session_id, working_path)
+        history_lines = self._format_claude_history(messages, display_name)
+
+        message_ts = await self.im_client.send_message(
+            channel_context,
+            "\n".join(history_lines),
+            parse_mode="markdown",
+        )
+
+        if message_ts:
+            settings_key = self.controller._get_settings_key(context)
+            base_session_id = f"slack_{message_ts}"
+            self.settings_manager.set_session_mapping(
+                settings_key,
+                base_session_id,
+                session_id,
+            )
+            self.settings_manager.mark_thread_active(
+                context.user_id, context.channel_id, message_ts
+            )
+            logger.info(f"Bound thread {message_ts} to Claude session {session_id}")
+
+    def _format_opencode_history(self, messages: list, display_name: str) -> list:
+        history_lines = [f"📋 **恢复会话：{display_name}**\n"]
+        msg_count = 0
+        for msg in messages[-10:]:
+            info = msg.get("info", {})
+            role = info.get("role", "")
+            parts = msg.get("parts", [])
+            content = ""
+            for part in parts:
+                if part.get("type") == "text":
+                    content = part.get("text", "")
+                    break
+            if content and role in ("user", "assistant"):
+                role_icon = "👤" if role == "user" else "🤖"
+                content_preview = content.replace("\n", " ")[:100]
+                if len(content) > 100:
+                    content_preview += "..."
+                history_lines.append(f"{role_icon} {content_preview}")
+                msg_count += 1
+        if msg_count == 0:
+            history_lines.append("_(暂无历史消息)_")
+        history_lines.append("\n---\n💬 **在下方回复继续对话**")
+        return history_lines
+
+    def _format_claude_history(self, messages: list, display_name: str) -> list:
+        history_lines = [f"📋 **恢复会话：{display_name}**\n"]
+        msg_count = 0
+        for msg in messages[-10:]:
+            msg_type = msg.get("type", "")
+            if msg_type == "human":
+                content = msg.get("message", {}).get("content", "")
+                if content:
+                    content_preview = content.replace("\n", " ")[:100]
+                    if len(content) > 100:
+                        content_preview += "..."
+                    history_lines.append(f"👤 {content_preview}")
+                    msg_count += 1
+            elif msg_type == "assistant":
+                content_blocks = msg.get("message", {}).get("content", [])
+                text_content = ""
+                for block in content_blocks:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text_content = block.get("text", "")
+                        break
+                if text_content:
+                    content_preview = text_content.replace("\n", " ")[:100]
+                    if len(text_content) > 100:
+                        content_preview += "..."
+                    history_lines.append(f"🤖 {content_preview}")
+                    msg_count += 1
+        if msg_count == 0:
+            history_lines.append("_(暂无历史消息)_")
+        history_lines.append("\n---\n💬 **在下方回复继续对话**")
+        return history_lines

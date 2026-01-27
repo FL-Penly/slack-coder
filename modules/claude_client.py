@@ -1,6 +1,8 @@
+import json
 import logging
 import os
-from typing import Optional, Callable
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Callable
 from claude_code_sdk import (
     ClaudeCodeOptions,
     SystemMessage,
@@ -20,7 +22,9 @@ logger = logging.getLogger(__name__)
 
 class ClaudeClient:
     def __init__(
-        self, config: ClaudeCompatConfig, formatter: Optional[BaseMarkdownFormatter] = None
+        self,
+        config: ClaudeCompatConfig,
+        formatter: Optional[BaseMarkdownFormatter] = None,
     ):
         self.config = config
         self.formatter = formatter or SlackFormatter()
@@ -153,3 +157,90 @@ class ClaudeClient:
             if not message.content:
                 return True
         return False
+
+    @staticmethod
+    def _get_project_sessions_dir(working_path: str) -> Optional[Path]:
+        """Get the Claude sessions directory for a project path."""
+        claude_dir = Path.home() / ".claude" / "projects"
+        if not claude_dir.exists():
+            return None
+        normalized = working_path.replace("/", "-").replace("_", "-")
+        if normalized.startswith("-"):
+            normalized = normalized[1:]
+        project_dir = claude_dir / f"-{normalized}"
+        if project_dir.exists():
+            return project_dir
+        search_pattern = working_path.replace("/", "-").replace("_", "-")
+        for d in claude_dir.iterdir():
+            if d.is_dir() and search_pattern in d.name:
+                return d
+        return None
+
+    @staticmethod
+    def list_sessions(working_path: str) -> List[Dict[str, Any]]:
+        """List Claude Code sessions for a given working directory."""
+        sessions_dir = ClaudeClient._get_project_sessions_dir(working_path)
+        if not sessions_dir:
+            return []
+        index_file = sessions_dir / "sessions-index.json"
+        if not index_file.exists():
+            return []
+        try:
+            with open(index_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            entries = data.get("entries", [])
+            result = []
+            for entry in entries:
+                result.append(
+                    {
+                        "id": entry.get("sessionId", ""),
+                        "title": entry.get("summary", "")
+                        or entry.get("firstPrompt", "")[:50],
+                        "first_prompt": entry.get("firstPrompt", ""),
+                        "message_count": entry.get("messageCount", 0),
+                        "created": entry.get("created", ""),
+                        "modified": entry.get("modified", ""),
+                        "git_branch": entry.get("gitBranch", ""),
+                    }
+                )
+            result.sort(key=lambda x: x.get("modified", ""), reverse=True)
+            return result
+        except Exception as e:
+            logger.error(f"Failed to read Claude sessions index: {e}")
+            return []
+
+    @staticmethod
+    def get_session(session_id: str, working_path: str) -> Optional[Dict[str, Any]]:
+        """Get a specific Claude Code session by ID."""
+        sessions = ClaudeClient.list_sessions(working_path)
+        for s in sessions:
+            if s.get("id") == session_id:
+                return s
+        return None
+
+    @staticmethod
+    def get_session_messages(
+        session_id: str, working_path: str
+    ) -> List[Dict[str, Any]]:
+        """Get messages from a Claude Code session."""
+        sessions_dir = ClaudeClient._get_project_sessions_dir(working_path)
+        if not sessions_dir:
+            return []
+        session_file = sessions_dir / f"{session_id}.jsonl"
+        if not session_file.exists():
+            return []
+        messages = []
+        try:
+            with open(session_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            msg = json.loads(line)
+                            messages.append(msg)
+                        except json.JSONDecodeError:
+                            continue
+            return messages
+        except Exception as e:
+            logger.error(f"Failed to read Claude session file: {e}")
+            return []
