@@ -412,14 +412,8 @@ class MessageHandler:
                 )
                 await self.controller.agent_service.handle_message("opencode", request)
 
-            elif callback_data == "revert_changes":
-                await command_handlers.handle_revert_changes(context)
-
             elif callback_data == "view_all_changes":
                 await command_handlers.handle_view_all_changes(context)
-
-            elif callback_data.startswith("revert_round:"):
-                await command_handlers.handle_revert_changes(context)
 
             else:
                 logger.warning(f"Unknown callback data: {callback_data}")

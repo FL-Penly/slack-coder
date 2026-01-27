@@ -358,10 +358,7 @@ class Controller:
                 [
                     [
                         InlineButton(
-                            "✅ 查看全部变更", callback_data="view_all_changes"
-                        ),
-                        InlineButton(
-                            "↩️ 撤销本轮", callback_data=f"revert_round:{session_key}"
+                            "📊 查看全部变更", callback_data="view_all_changes"
                         ),
                     ]
                 ]

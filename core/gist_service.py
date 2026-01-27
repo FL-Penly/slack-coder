@@ -242,14 +242,25 @@ def get_saved_snapshot(session_key: str) -> Optional[DiffSnapshot]:
     return _diff_snapshots.get(session_key)
 
 
+def _sanitize_filename(file_path: str) -> str:
+    """Convert file path to safe filename for Gist."""
+    return file_path.replace("/", "_").replace("\\", "_") + ".diff"
+
+
 async def create_diff_gist(
     diff_output: str,
     working_path: str,
     description: Optional[str] = None,
-    filename_prefix: str = "",
+    per_file: bool = True,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Create a secret GitHub Gist with the diff content.
+
+    Args:
+        diff_output: Raw git diff output
+        working_path: Git repository path
+        description: Gist description
+        per_file: If True, create separate file for each changed file in the Gist
 
     Returns:
         Tuple of (gist_url, error_message)
@@ -263,51 +274,67 @@ async def create_diff_gist(
     if not description:
         description = f"AI changes in {project_name} at {timestamp}"
 
-    prefix = f"{filename_prefix}-" if filename_prefix else ""
+    temp_dir = None
+    temp_files: List[str] = []
 
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".diff",
-            prefix=f"{prefix}{project_name}-{timestamp}-",
-            delete=False,
-        ) as f:
-            f.write(diff_output)
-            diff_file = f.name
+        if per_file:
+            files_dict = _parse_diff_to_files(diff_output)
+            if not files_dict:
+                return None, "No files to diff"
 
-        try:
-            process = await asyncio.create_subprocess_exec(
-                "gh",
-                "gist",
-                "create",
-                diff_file,
-                "-d",
-                description,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await process.communicate()
+            temp_dir = tempfile.mkdtemp(prefix=f"{project_name}-{timestamp}-")
 
-            if process.returncode != 0:
-                error_msg = stderr.decode("utf-8", errors="replace").strip()
-                logger.error(f"Failed to create gist: {error_msg}")
-                return None, error_msg
+            for file_path, file_diff in files_dict.items():
+                safe_name = _sanitize_filename(file_path)
+                temp_path = os.path.join(temp_dir, safe_name)
+                with open(temp_path, "w") as f:
+                    f.write(file_diff)
+                temp_files.append(temp_path)
+        else:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".diff",
+                prefix=f"{project_name}-{timestamp}-",
+                delete=False,
+            ) as f:
+                f.write(diff_output)
+                temp_files.append(f.name)
 
-            gist_url = stdout.decode("utf-8", errors="replace").strip()
-            logger.info(f"Created gist: {gist_url}")
-            return gist_url, None
+        cmd = ["gh", "gist", "create"] + temp_files + ["-d", description]
 
-        finally:
-            try:
-                os.unlink(diff_file)
-            except Exception:
-                pass
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            error_msg = stderr.decode("utf-8", errors="replace").strip()
+            logger.error(f"Failed to create gist: {error_msg}")
+            return None, error_msg
+
+        gist_url = stdout.decode("utf-8", errors="replace").strip()
+        logger.info(f"Created gist with {len(temp_files)} file(s): {gist_url}")
+        return gist_url, None
 
     except FileNotFoundError:
         return None, "gh CLI not found. Install with: brew install gh"
     except Exception as e:
         logger.error(f"Error creating gist: {e}", exc_info=True)
         return None, str(e)
+    finally:
+        for f in temp_files:
+            try:
+                os.unlink(f)
+            except Exception:
+                pass
+        if temp_dir:
+            try:
+                os.rmdir(temp_dir)
+            except Exception:
+                pass
 
 
 async def create_incremental_diff_gist(
@@ -315,12 +342,6 @@ async def create_incremental_diff_gist(
     working_path: str,
     description: Optional[str] = None,
 ) -> Tuple[Optional[str], List[FileDiffInfo], Optional[str]]:
-    """
-    Create a gist with only the incremental changes from this round.
-
-    Returns:
-        Tuple of (gist_url, file_diffs, error_message)
-    """
     file_diffs, incremental_diff, _ = await get_incremental_diff(
         session_key, working_path
     )
@@ -329,7 +350,7 @@ async def create_incremental_diff_gist(
         return None, [], None
 
     gist_url, error = await create_diff_gist(
-        incremental_diff, working_path, description, filename_prefix="round"
+        incremental_diff, working_path, description, per_file=True
     )
 
     return gist_url, file_diffs, error
@@ -339,42 +360,13 @@ async def create_full_diff_gist(
     working_path: str,
     description: Optional[str] = None,
 ) -> Tuple[Optional[str], str, Optional[str]]:
-    """
-    Create a gist with all uncommitted changes (for "apply" action).
-
-    Returns:
-        Tuple of (gist_url, stat_summary, error_message)
-    """
     stat_output, diff_output = await get_git_diff(working_path)
 
     if not diff_output.strip():
         return None, "", None
 
     gist_url, error = await create_diff_gist(
-        diff_output, working_path, description, filename_prefix="full"
+        diff_output, working_path, description, per_file=True
     )
-
-    return gist_url, stat_output, error
-
-
-# Legacy function for backward compatibility
-async def check_and_create_diff_gist(
-    working_path: str,
-    description: Optional[str] = None,
-) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """
-    Check for git changes and create a gist if there are any.
-
-    DEPRECATED: Use create_incremental_diff_gist or create_full_diff_gist instead.
-
-    Returns:
-        Tuple of (gist_url, stat_summary, error_message)
-    """
-    stat_output, diff_output = await get_git_diff(working_path)
-
-    if not stat_output:
-        return None, None, None
-
-    gist_url, error = await create_diff_gist(diff_output, working_path, description)
 
     return gist_url, stat_output, error

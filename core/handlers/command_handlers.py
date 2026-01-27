@@ -751,40 +751,6 @@ class CommandHandlers:
         history_lines.append("\n---\n💬 **在下方回复继续对话**")
         return history_lines
 
-    async def handle_revert_changes(self, context: MessageContext):
-        try:
-            channel_context = self._get_channel_context(context)
-            working_path = self.controller.get_cwd(context)
-
-            process = await asyncio.create_subprocess_exec(
-                "git",
-                "checkout",
-                ".",
-                cwd=working_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            _, stderr = await process.communicate()
-
-            if process.returncode == 0:
-                await self.im_client.send_message(
-                    channel_context,
-                    f"✅ 已撤销所有未提交的变更\n📁 `{working_path}`",
-                )
-            else:
-                error_msg = stderr.decode("utf-8", errors="replace").strip()
-                await self.im_client.send_message(
-                    channel_context,
-                    f"❌ 撤销失败：{error_msg}",
-                )
-
-        except Exception as e:
-            logger.error(f"Error reverting changes: {e}", exc_info=True)
-            channel_context = self._get_channel_context(context)
-            await self.im_client.send_message(
-                channel_context, f"❌ 撤销变更失败：{str(e)}"
-            )
-
     async def handle_view_all_changes(self, context: MessageContext):
         try:
             channel_context = self._get_channel_context(context)
