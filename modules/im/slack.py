@@ -39,7 +39,6 @@ class SlackBot(BaseIMClient):
 
         # Store callback handlers
         self.command_handlers: Dict[str, Callable] = {}
-        self.slash_command_handlers: Dict[str, Callable] = {}
 
         # Store trigger IDs for modal interactions
         self.trigger_ids: Dict[str, str] = {}
@@ -516,12 +515,6 @@ class SlackBot(BaseIMClient):
                 # Acknowledge after handling events
                 response = SocketModeResponse(envelope_id=req.envelope_id)
                 await client.send_socket_mode_response(response)
-            elif req.type == "slash_commands":
-                # Handle slash commands
-                await self._handle_slash_command(req.payload)
-                # Acknowledge after handling slash commands
-                response = SocketModeResponse(envelope_id=req.envelope_id)
-                await client.send_socket_mode_response(response)
             elif req.type == "interactive":
                 # For interactive components, acknowledge FIRST to avoid Slack timeout
                 # This is important for long-running operations like updates
@@ -724,87 +717,6 @@ class SlackBot(BaseIMClient):
             tab = event.get("tab")
             if tab == "home" and hasattr(self, "_on_app_home_opened"):
                 await self._on_app_home_opened(user_id)
-
-    async def _handle_slash_command(self, payload: Dict[str, Any]):
-        """Handle native Slack slash commands"""
-        command = payload.get("command", "").lstrip("/")
-        channel_id = payload.get("channel_id")
-
-        # Check if channel is authorized based on whitelist
-        if not await self._is_authorized_channel(channel_id):
-            logger.info(f"Unauthorized slash command from channel: {channel_id}")
-            # Send a response to user about unauthorized channel
-            response_url = payload.get("response_url")
-            if response_url:
-                await self.send_slash_response(
-                    response_url,
-                    "❌ This channel is disabled.",
-                )
-            return
-
-        # Map Slack slash commands to internal commands
-        # Support both /vibe-xxx format (native slash commands) and legacy /xxx format
-        command_mapping = {
-            # Native slash commands with vibe- prefix
-            "vibe-start": "start",
-            "vibe-stop": "stop",
-            "vibe-cwd": "cwd",
-            "vibe-setcwd": "set_cwd",
-            "vibe-clear": "clear",
-            "vibe-sessions": "sessions",
-            "vibe-diff": "diff",
-            "vibe-help": "help",
-            # Legacy commands (for backward compatibility)
-            "start": "start",
-            "stop": "stop",
-        }
-
-        # Get the actual command name
-        actual_command = command_mapping.get(command, command)
-
-        # Create context for slash command
-        context = MessageContext(
-            user_id=payload.get("user_id"),
-            channel_id=payload.get("channel_id"),
-            platform_specific={
-                "trigger_id": payload.get("trigger_id"),
-                "response_url": payload.get("response_url"),
-                "command": command,
-                "text": payload.get("text"),
-                "payload": payload,
-            },
-        )
-
-        # Send immediate acknowledgment to Slack
-        response_url = payload.get("response_url")
-
-        # Try to handle as registered command
-        if actual_command in self.on_command_callbacks:
-            handler = self.on_command_callbacks[actual_command]
-
-            # Send immediate "processing" response for long-running commands
-            if response_url and actual_command not in [
-                "start",
-                "status",
-                "clear",
-                "cwd",
-                "queue",
-            ]:
-                await self.send_slash_response(
-                    response_url, f"⏳ Processing `/{command}`..."
-                )
-
-            await handler(context, payload.get("text", ""))
-        elif actual_command in self.slash_command_handlers:
-            handler = self.slash_command_handlers[actual_command]
-            await handler(context, payload.get("text", ""))
-        else:
-            # Send response back to Slack for unknown command
-            if response_url:
-                await self.send_slash_response(
-                    response_url,
-                    f"❌ Unknown command: `/{command}`\n\nPlease use `@Slack Coder /start` to access all bot features.",
-                )
 
     async def _handle_interactive(self, payload: Dict[str, Any]):
         """Handle interactive components (buttons, modal submissions, etc.)"""
@@ -2747,12 +2659,6 @@ class SlackBot(BaseIMClient):
         if on_command:
             self.command_handlers.update(on_command)
 
-        # Register any slash command handlers passed in kwargs
-        if "on_slash_command" in kwargs:
-            slash_commands = kwargs["on_slash_command"]
-            if isinstance(slash_commands, dict):
-                self.slash_command_handlers.update(slash_commands)
-
         # Register settings update handler
         if "on_settings_update" in kwargs:
             self._on_settings_update = kwargs["on_settings_update"]
@@ -2794,26 +2700,6 @@ class SlackBot(BaseIMClient):
         """Get existing thread timestamp or return None for new thread"""
         # Deprecated: Thread handling now uses user's message timestamp directly
         return None
-
-    async def send_slash_response(
-        self, response_url: str, text: str, ephemeral: bool = True
-    ) -> bool:
-        """Send response to a slash command via response_url"""
-        try:
-            import aiohttp
-
-            async with aiohttp.ClientSession() as session:
-                await session.post(
-                    response_url,
-                    json={
-                        "text": text,
-                        "response_type": "ephemeral" if ephemeral else "in_channel",
-                    },
-                )
-            return True
-        except Exception as e:
-            logger.error(f"Error sending slash command response: {e}")
-            return False
 
     async def _is_authorized_channel(self, channel_id: str) -> bool:
         """Check if a channel is authorized based on whitelist configuration"""

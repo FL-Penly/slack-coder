@@ -116,7 +116,15 @@ class CommandHandlers:
         buttons = [
             [
                 InlineButton(text="📋 恢复会话", callback_data="cmd_resume"),
+                InlineButton(text="🛑 停止执行", callback_data="cmd_stop"),
+            ],
+            [
+                InlineButton(text="📁 当前目录", callback_data="cmd_cwd"),
                 InlineButton(text="📂 切换目录", callback_data="cmd_change_cwd"),
+            ],
+            [
+                InlineButton(text="📊 Git 变更", callback_data="cmd_diff"),
+                InlineButton(text="🔄 清除会话", callback_data="cmd_clear"),
             ],
             [
                 InlineButton(text="🤖 Agent 设置", callback_data="cmd_routing"),
@@ -129,12 +137,10 @@ class CommandHandlers:
         welcome_text = f"""🎉 **欢迎使用 Slack Coder！**
 
 👋 你好 **{user_name}**！
-🔧 平台：**{platform_name}**
 🤖 Agent：**{agent_display_name}**
 📍 频道：**{channel_info.get("name", "Unknown")}**
 
-**快捷操作：**
-使用下方按钮管理 {agent_display_name} 会话，或直接发消息开始对话！"""
+直接发消息开始对话，或使用下方按钮："""
 
         # Send command response to channel (not in thread)
         channel_context = self._get_channel_context(context)
