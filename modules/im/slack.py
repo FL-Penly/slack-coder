@@ -14,6 +14,12 @@ from markdown_to_mrkdwn import SlackMarkdownConverter
 from .base import BaseIMClient, MessageContext, InlineKeyboard, InlineButton
 from config.v2_config import SlackConfig
 from .formatters import SlackFormatter
+from core.diff_parser import (
+    parse_unified_diff,
+    format_diff_for_slack,
+    format_diff_summary,
+    format_diff_as_rich_text_blocks,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1827,30 +1833,22 @@ class SlackBot(BaseIMClient):
                 }
             )
         else:
-            truncated_stat = (
-                stat_output[:2800] if len(stat_output) > 2800 else stat_output
-            )
+            parsed_files = parse_unified_diff(diff_output)
+            summary = format_diff_summary(parsed_files)
+
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"```\n{truncated_stat}\n```"},
+                    "text": {"type": "mrkdwn", "text": f"📊 *{summary}*"},
                 }
             )
+            blocks.append({"type": "divider"})
 
-            if diff_output and len(diff_output) > 100:
-                diff_preview = diff_output[:1500]
-                if len(diff_output) > 1500:
-                    diff_preview += "\n\n... (内容过长，已截断)"
-                blocks.append({"type": "divider"})
-                blocks.append(
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": f"*详细变更：*\n```\n{diff_preview}\n```",
-                        },
-                    }
+            if parsed_files:
+                diff_blocks = format_diff_as_rich_text_blocks(
+                    parsed_files, max_changes_per_file=8, max_files=6
                 )
+                blocks.extend(diff_blocks)
 
         view = {
             "type": "modal",
