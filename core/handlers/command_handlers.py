@@ -784,3 +784,50 @@ class CommandHandlers:
             await self.im_client.send_message(
                 channel_context, f"❌ 撤销变更失败：{str(e)}"
             )
+
+    async def handle_view_all_changes(self, context: MessageContext):
+        try:
+            channel_context = self._get_channel_context(context)
+            working_path = self.controller.get_cwd(context)
+
+            from core.gist_service import create_full_diff_gist
+
+            gist_url, stat_summary, error = await create_full_diff_gist(working_path)
+
+            if error:
+                await self.im_client.send_message(
+                    channel_context,
+                    f"❌ 创建 Gist 失败：{error}",
+                )
+                return
+
+            if not gist_url:
+                await self.im_client.send_message(
+                    channel_context,
+                    "✅ 没有未提交的变更",
+                )
+                return
+
+            lines = stat_summary.strip().split("\n") if stat_summary else []
+            file_count = len([line for line in lines if "|" in line])
+            last_line = lines[-1] if lines else ""
+
+            stats_info = ""
+            if last_line and ("insertion" in last_line or "deletion" in last_line):
+                stats_info = f" ({last_line.strip()})"
+
+            message = (
+                f"📊 *全部未提交变更*\n\n"
+                f"📁 `{working_path}`\n"
+                f"📄 {file_count} 个文件变更{stats_info}\n\n"
+                f"🔗 <{gist_url}|查看完整 Diff>"
+            )
+
+            await self.im_client.send_message(channel_context, message)
+
+        except Exception as e:
+            logger.error(f"Error viewing all changes: {e}", exc_info=True)
+            channel_context = self._get_channel_context(context)
+            await self.im_client.send_message(
+                channel_context, f"❌ 查看变更失败：{str(e)}"
+            )

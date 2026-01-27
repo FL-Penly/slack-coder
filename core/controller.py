@@ -18,7 +18,11 @@ from core.handlers import (
     MessageHandler,
 )
 from core.update_checker import UpdateChecker
-from core.gist_service import check_and_create_diff_gist
+from core.gist_service import (
+    create_incremental_diff_gist,
+    create_full_diff_gist,
+    clear_diff_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -304,29 +308,48 @@ class Controller:
     ):
         try:
             working_path = self.get_cwd(context)
-            gist_url, stat_summary, error = await check_and_create_diff_gist(
-                working_path
+            session_key = (
+                f"{context.channel_id}:{context.thread_id or context.message_id}"
+            )
+
+            gist_url, file_diffs, error = await create_incremental_diff_gist(
+                session_key, working_path
             )
 
             if error:
                 logger.debug(f"Gist creation skipped or failed: {error}")
                 return
 
-            if not gist_url:
+            if not gist_url or not file_diffs:
                 return
 
-            lines = stat_summary.strip().split("\n") if stat_summary else []
-            file_count = len([l for l in lines if "|" in l])
-            last_line = lines[-1] if lines else ""
+            file_lines = []
+            total_insertions = 0
+            total_deletions = 0
 
-            stats_info = ""
-            if last_line and ("insertion" in last_line or "deletion" in last_line):
-                stats_info = f" ({last_line.strip()})"
+            for f in file_diffs[:5]:
+                if f.is_new:
+                    icon = "🆕"
+                elif f.is_deleted:
+                    icon = "🗑️"
+                else:
+                    icon = "📄"
+
+                stats = f"+{f.insertions}, -{f.deletions}"
+                file_lines.append(f"{icon} `{f.path}` ({stats})")
+                total_insertions += f.insertions
+                total_deletions += f.deletions
+
+            if len(file_diffs) > 5:
+                file_lines.append(f"_... 还有 {len(file_diffs) - 5} 个文件_")
+
+            files_text = "\n".join(file_lines)
+            stats_summary = f"+{total_insertions}, -{total_deletions}"
 
             message = (
-                f"📝 *本轮对话有代码变更*\n\n"
-                f"📊 {file_count} 个文件变更{stats_info}\n\n"
-                f"🔗 <{gist_url}|点击查看 Diff>"
+                f"📝 *本轮对话修改了 {len(file_diffs)} 个文件* ({stats_summary})\n\n"
+                f"{files_text}\n\n"
+                f"🔗 <{gist_url}|查看本轮 Diff>"
             )
 
             from modules.im import InlineKeyboard, InlineButton
@@ -334,13 +357,20 @@ class Controller:
             keyboard = InlineKeyboard(
                 [
                     [
-                        InlineButton("↩️ 撤销变更", callback_data="revert_changes"),
+                        InlineButton(
+                            "✅ 查看全部变更", callback_data="view_all_changes"
+                        ),
+                        InlineButton(
+                            "↩️ 撤销本轮", callback_data=f"revert_round:{session_key}"
+                        ),
                     ]
                 ]
             )
             await self.im_client.send_message_with_buttons(
                 target_context, message, keyboard
             )
+
+            clear_diff_snapshot(session_key)
 
         except Exception as e:
             logger.warning(f"Failed to send diff gist notification: {e}")

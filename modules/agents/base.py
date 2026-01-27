@@ -29,9 +29,9 @@ class AgentRequest:
     last_agent_message: Optional[str] = None
     last_agent_message_parse_mode: Optional[str] = None
     started_at: float = field(default_factory=time.monotonic)
-    # Reaction ack: emoji added to user's message, to be removed when result is sent
     ack_reaction_message_id: Optional[str] = None
     ack_reaction_emoji: Optional[str] = None
+    diff_session_key: Optional[str] = None
 
 
 @dataclass

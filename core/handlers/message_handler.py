@@ -7,6 +7,7 @@ from typing import Dict, Optional, Tuple
 
 from modules.agents import AgentRequest
 from modules.im import MessageContext
+from core.gist_service import save_diff_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +244,11 @@ class MessageHandler:
                             f"Failed to remove reaction ack for subagent: {err}"
                         )
 
+            session_key = (
+                f"{context.channel_id}:{context.thread_id or context.message_id}"
+            )
+            await save_diff_snapshot(session_key, working_path)
+
             request = AgentRequest(
                 context=context,
                 message=message,
@@ -260,6 +266,7 @@ class MessageHandler:
                 if not subagent_name
                 else None,
                 ack_reaction_emoji=ack_reaction_emoji if not subagent_name else None,
+                diff_session_key=session_key,
             )
             try:
                 await self.controller.agent_service.handle_message(agent_name, request)
@@ -406,6 +413,12 @@ class MessageHandler:
                 await self.controller.agent_service.handle_message("opencode", request)
 
             elif callback_data == "revert_changes":
+                await command_handlers.handle_revert_changes(context)
+
+            elif callback_data == "view_all_changes":
+                await command_handlers.handle_view_all_changes(context)
+
+            elif callback_data.startswith("revert_round:"):
                 await command_handlers.handle_revert_changes(context)
 
             else:
