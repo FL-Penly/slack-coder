@@ -432,11 +432,6 @@ class CommandHandlers:
 
     async def handle_diff(self, context: MessageContext, args: str = ""):
         try:
-            trigger_id = (
-                context.platform_specific.get("trigger_id")
-                if context.platform_specific
-                else None
-            )
             channel_context = self._get_channel_context(context)
             working_path = self.controller.get_cwd(context)
 
@@ -447,61 +442,28 @@ class CommandHandlers:
                 )
                 return
 
-            process = await asyncio.create_subprocess_exec(
-                "git",
-                "diff",
-                "--stat",
-                cwd=working_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stat_stdout, stat_stderr = await process.communicate()
+            from core.gist_service import create_full_diff_gist
 
-            if process.returncode != 0:
-                error_msg = stat_stderr.decode("utf-8", errors="replace").strip()
+            gist_url, _, error = await create_full_diff_gist(working_path)
+
+            if error:
+                await self.im_client.send_message(channel_context, f"❌ {error}")
+                return
+
+            if not gist_url:
                 await self.im_client.send_message(
-                    channel_context, f"❌ Git diff 失败：{error_msg}"
+                    channel_context, "✅ 没有未提交的变更"
                 )
                 return
 
-            stat_output = stat_stdout.decode("utf-8", errors="replace").strip()
-
-            process = await asyncio.create_subprocess_exec(
-                "git",
-                "diff",
-                cwd=working_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            await self.im_client.send_message(
+                channel_context, f"🔗 <{gist_url}|查看 Git 变更>"
             )
-            diff_stdout, _ = await process.communicate()
-            diff_output = diff_stdout.decode("utf-8", errors="replace")
-
-            if trigger_id and hasattr(self.im_client, "open_diff_modal"):
-                await self.im_client.open_diff_modal(
-                    trigger_id,
-                    stat_output,
-                    diff_output,
-                    working_path,
-                    context.channel_id,
-                )
-            else:
-                if not stat_output:
-                    await self.im_client.send_message(
-                        channel_context, f"✅ 没有未提交的更改\n📁 `{working_path}`"
-                    )
-                else:
-                    await self.im_client.send_message(
-                        channel_context,
-                        f"📊 **Git 变更**\n📁 `{working_path}`\n```\n{stat_output}\n```",
-                        parse_mode="markdown",
-                    )
 
         except Exception as e:
             logger.error(f"Error generating diff: {e}", exc_info=True)
             channel_context = self._get_channel_context(context)
-            await self.im_client.send_message(
-                channel_context, f"❌ 获取 Git 变更失败：{str(e)}"
-            )
+            await self.im_client.send_message(channel_context, f"❌ {str(e)}")
 
     async def handle_help(self, context: MessageContext, args: str = ""):
         """Handle /help command - show available commands"""
@@ -758,12 +720,12 @@ class CommandHandlers:
 
             from core.gist_service import create_full_diff_gist
 
-            gist_url, stat_summary, error = await create_full_diff_gist(working_path)
+            gist_url, _, error = await create_full_diff_gist(working_path)
 
             if error:
                 await self.im_client.send_message(
                     channel_context,
-                    f"❌ 创建 Gist 失败：{error}",
+                    f"❌ {error}",
                 )
                 return
 
@@ -774,26 +736,11 @@ class CommandHandlers:
                 )
                 return
 
-            lines = stat_summary.strip().split("\n") if stat_summary else []
-            file_count = len([line for line in lines if "|" in line])
-            last_line = lines[-1] if lines else ""
-
-            stats_info = ""
-            if last_line and ("insertion" in last_line or "deletion" in last_line):
-                stats_info = f" ({last_line.strip()})"
-
-            message = (
-                f"📊 *全部未提交变更*\n\n"
-                f"📁 `{working_path}`\n"
-                f"📄 {file_count} 个文件变更{stats_info}\n\n"
-                f"🔗 <{gist_url}|查看完整 Diff>"
+            await self.im_client.send_message(
+                channel_context, f"🔗 <{gist_url}|查看全部 Diff>"
             )
-
-            await self.im_client.send_message(channel_context, message)
 
         except Exception as e:
             logger.error(f"Error viewing all changes: {e}", exc_info=True)
             channel_context = self._get_channel_context(context)
-            await self.im_client.send_message(
-                channel_context, f"❌ 查看变更失败：{str(e)}"
-            )
+            await self.im_client.send_message(channel_context, f"❌ {str(e)}")
