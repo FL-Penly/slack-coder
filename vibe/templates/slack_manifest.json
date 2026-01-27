@@ -4,13 +4,13 @@
     "minor_version": 1
   },
   "display_information": {
-    "name": "Vibe Remote",
+    "name": "Slack Coder",
     "description": "AI coding agent runtime for Slack",
     "background_color": "#262626"
   },
   "features": {
     "bot_user": {
-      "display_name": "Vibe Remote",
+      "display_name": "Slack Coder",
       "always_online": true
     },
     "app_home": {

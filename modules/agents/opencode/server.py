@@ -384,6 +384,25 @@ class OpenCodeServerManager:
             f"Process exit code: {exit_code}"
         )
 
+    async def update_env_vars(self, env_vars: Dict[str, str]) -> bool:
+        if self.env_vars == env_vars:
+            return False
+
+        self.env_vars = env_vars
+        logger.info(f"Updating OpenCode env_vars: {list(env_vars.keys())}")
+
+        pids = self._find_opencode_serve_pids(self.port)
+        if pids:
+            for pid in pids:
+                await self._terminate_pid(pid, reason="env_vars update")
+            self._clear_pid_file()
+            self._process = None
+
+            await self.ensure_running()
+            logger.info("OpenCode server restarted with new env_vars")
+
+        return True
+
     async def stop(self) -> None:
         async with self._lock:
             if self._http_session:

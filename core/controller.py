@@ -583,7 +583,9 @@ class Controller:
     ) -> bool:
         target_context = self._get_target_context(context)
         try:
-            if hasattr(self.im_client, "remove_inline_keyboard"):
+            if hasattr(self.im_client, "delete_message"):
+                return await self.im_client.delete_message(target_context, message_id)
+            elif hasattr(self.im_client, "remove_inline_keyboard"):
                 return await self.im_client.remove_inline_keyboard(
                     target_context, message_id, text=new_text, parse_mode="markdown"
                 )
@@ -864,13 +866,6 @@ class Controller:
                 f"agent={opencode_agent}, model={opencode_model}, require_mention={require_mention}"
             )
 
-            if env_vars_changed:
-                await self.im_client.send_message(
-                    context,
-                    "⚠️ Environment variables updated. Restart vibe to apply changes.",
-                    parse_mode="markdown",
-                )
-
         except Exception as e:
             logger.error(f"Error updating routing: {e}")
             context = MessageContext(
@@ -884,7 +879,7 @@ class Controller:
 
     async def _update_opencode_env_vars(self, env_vars: Dict[str, str]) -> bool:
         from config.v2_config import V2Config
-        from config import paths
+        from modules.agents.opencode.server import OpenCodeServerManager
 
         try:
             config = V2Config.load()
@@ -896,6 +891,10 @@ class Controller:
             config.agents.opencode.env_vars = env_vars
             config.save()
             logger.info(f"Updated OpenCode env_vars: {list(env_vars.keys())}")
+
+            if OpenCodeServerManager._instance:
+                await OpenCodeServerManager._instance.update_env_vars(env_vars)
+
             return True
         except Exception as e:
             logger.error(f"Failed to update OpenCode env_vars: {e}")

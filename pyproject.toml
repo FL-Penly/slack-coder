@@ -34,7 +34,6 @@ dependencies = [
     "markdown_to_mrkdwn>=0.2.0",
     "typing_extensions>=4.12.2",
     "PyYAML>=6.0",
-    "flask>=3.0.0",
 ]
 
 [project.urls]
@@ -45,6 +44,7 @@ Issues = "https://github.com/FL-Penly/slack-coder/issues"
 
 [project.scripts]
 slack-coder = "vibe.cli:main"
+vibe = "vibe.cli:main"
 
 [tool.hatch.version]
 source = "vcs"
@@ -52,26 +52,19 @@ source = "vcs"
 [tool.hatch.build.hooks.vcs]
 version-file = "vibe/_version.py"
 
-[tool.hatch.build]
-# Include ui/dist even though it's in .gitignore (build artifacts)
-artifacts = ["ui/dist/**"]
-
 [tool.hatch.build.targets.wheel]
 packages = ["vibe", "config", "core", "modules"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "main.py" = "vibe/service_main.py"
-"ui/dist" = "vibe/ui/dist"
 
 [tool.hatch.build.targets.sdist]
-# Include ui/dist for source distribution
 include = [
     "vibe/**",
     "config/**",
     "core/**",
     "modules/**",
     "main.py",
-    "ui/dist/**",
     "README.md",
     "LICENSE",
 ]

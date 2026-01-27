@@ -28,23 +28,6 @@ def get_project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def get_ui_dist_path() -> Path:
-    """Get the path to UI dist directory."""
-    # First check if we're in development mode (ui/dist exists at project root)
-    project_root = get_project_root()
-    dev_ui_path = project_root / "ui" / "dist"
-    if dev_ui_path.exists():
-        return dev_ui_path
-    
-    # Then check if UI is bundled with the package
-    package_ui_path = get_package_root() / "ui" / "dist"
-    if package_ui_path.exists():
-        return package_ui_path
-    
-    # Fallback to development path
-    return dev_ui_path
-
-
 def get_service_main_path() -> Path:
     """Get the path to the main service entry point."""
     # First check if we're in development mode (main.py exists at project root)
@@ -52,12 +35,12 @@ def get_service_main_path() -> Path:
     dev_main_path = project_root / "main.py"
     if dev_main_path.exists():
         return dev_main_path
-    
+
     # Then check if service_main.py is bundled with the package
     package_main_path = get_package_root() / "service_main.py"
     if package_main_path.exists():
         return package_main_path
-    
+
     # Fallback to development path
     return dev_main_path
 
@@ -68,7 +51,7 @@ def get_working_dir() -> Path:
     project_root = get_project_root()
     if (project_root / "main.py").exists():
         return project_root
-    
+
     # In installed mode, use package root
     return get_package_root()
 
@@ -158,12 +141,11 @@ def stop_process(pid_path):
     return True
 
 
-def write_status(state, detail=None, service_pid=None, ui_pid=None):
+def write_status(state, detail=None, service_pid=None):
     payload = {
         "state": state,
         "detail": detail,
         "service_pid": service_pid,
-        "ui_pid": ui_pid,
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     write_json(paths.get_runtime_status_path(), payload)
@@ -193,21 +175,5 @@ def start_service():
     )
 
 
-def start_ui(host, port):
-    command = "from vibe.ui_server import run_ui_server; run_ui_server('{}', {})".format(
-        host, port
-    )
-    return spawn_background(
-        [sys.executable, "-c", command],
-        paths.get_runtime_ui_pid_path(),
-        "ui_stdout.log",
-        "ui_stderr.log",
-    )
-
-
 def stop_service():
     return stop_process(paths.get_runtime_pid_path())
-
-
-def stop_ui():
-    return stop_process(paths.get_runtime_ui_pid_path())

@@ -70,7 +70,7 @@ class CommandHandlers:
 
             # Build welcome message using formatter to handle escaping properly
             lines = [
-                formatter.format_bold("Welcome to Vibe Remote!"),
+                formatter.format_bold("Welcome to Slack Coder!"),
                 "",
                 f"Platform: {formatter.format_text(platform_name)}",
                 f"Agent: {formatter.format_text(agent_display_name)}",
@@ -78,21 +78,21 @@ class CommandHandlers:
                 f"Channel/Chat ID: {formatter.format_code_inline(context.channel_id)}",
                 "",
                 formatter.format_bold("Commands:"),
-                formatter.format_text("@Vibe Remote /start - Show this message"),
+                formatter.format_text("@Slack Coder /start - Show this message"),
                 formatter.format_text(
-                    "@Vibe Remote /clear - Reset session and start fresh"
+                    "@Slack Coder /clear - Reset session and start fresh"
                 ),
                 formatter.format_text(
-                    "@Vibe Remote /cwd - Show current working directory"
+                    "@Slack Coder /cwd - Show current working directory"
                 ),
                 formatter.format_text(
-                    "@Vibe Remote /set_cwd <path> - Set working directory"
+                    "@Slack Coder /set_cwd <path> - Set working directory"
                 ),
                 formatter.format_text(
-                    "@Vibe Remote /settings - Personalization settings"
+                    "@Slack Coder /settings - Personalization settings"
                 ),
                 formatter.format_text(
-                    f"@Vibe Remote /stop - Interrupt {agent_display_name} execution"
+                    f"@Slack Coder /stop - Interrupt {agent_display_name} execution"
                 ),
                 "",
                 formatter.format_bold("How it works:"),
@@ -126,7 +126,7 @@ class CommandHandlers:
 
         keyboard = InlineKeyboard(buttons=buttons)
 
-        welcome_text = f"""🎉 **欢迎使用 Vibe Remote！**
+        welcome_text = f"""🎉 **欢迎使用 Slack Coder！**
 
 👋 你好 **{user_name}**！
 🔧 平台：**{platform_name}**

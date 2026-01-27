@@ -467,6 +467,22 @@ class SlackBot(BaseIMClient):
             logger.error(f"Error removing Slack buttons: {e}")
             return False
 
+    async def delete_message(
+        self,
+        context: MessageContext,
+        message_id: str,
+    ) -> bool:
+        self._ensure_clients()
+        try:
+            await self.web_client.chat_delete(
+                channel=context.channel_id,
+                ts=message_id,
+            )
+            return True
+        except SlackApiError as e:
+            logger.debug(f"Failed to delete message: {e}")
+            return False
+
     async def answer_callback(
         self, callback_id: str, text: Optional[str] = None, show_alert: bool = False
     ) -> bool:
@@ -712,7 +728,7 @@ class SlackBot(BaseIMClient):
             if response_url:
                 await self.send_slash_response(
                     response_url,
-                    "❌ This channel is not enabled. Please go to the control panel to enable it.",
+                    "❌ This channel is disabled.",
                 )
             return
 
@@ -777,7 +793,7 @@ class SlackBot(BaseIMClient):
             if response_url:
                 await self.send_slash_response(
                     response_url,
-                    f"❌ Unknown command: `/{command}`\n\nPlease use `@Vibe Remote /start` to access all bot features.",
+                    f"❌ Unknown command: `/{command}`\n\nPlease use `@Slack Coder /start` to access all bot features.",
                 )
 
     async def _handle_interactive(self, payload: Dict[str, Any]):
@@ -2511,18 +2527,16 @@ class SlackBot(BaseIMClient):
     async def _is_authorized_channel(self, channel_id: str) -> bool:
         """Check if a channel is authorized based on whitelist configuration"""
         if not self.settings_manager:
-            logger.warning("No settings_manager configured; rejecting by default")
-            return False
+            return True
 
         settings = self.settings_manager.get_channel_settings(channel_id)
         if settings is None:
-            logger.warning("No channel settings found; rejecting by default")
-            return False
+            return True
 
         if settings.enabled:
             return True
 
-        logger.info("Channel not enabled in settings.json: %s", channel_id)
+        logger.info("Channel explicitly disabled: %s", channel_id)
         return False
 
     async def _send_unauthorized_message(self, channel_id: str):
@@ -2531,7 +2545,7 @@ class SlackBot(BaseIMClient):
             self._ensure_clients()
             await self.web_client.chat_postMessage(
                 channel=channel_id,
-                text="❌ This channel is not enabled. Please go to the control panel to enable it.",
+                text="❌ This channel is disabled.",
             )
         except Exception as e:
             logger.error(f"Failed to send unauthorized message to {channel_id}: {e}")
