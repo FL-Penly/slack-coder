@@ -28,6 +28,14 @@ class ClaudeAgent(BaseAgent):
 
     async def handle_message(self, request: AgentRequest) -> None:
         context = request.context
+        stop_button_message_id = None
+
+        if hasattr(self.controller, "send_processing_message_with_stop_button"):
+            stop_button_message_id = (
+                await self.controller.send_processing_message_with_stop_button(
+                    request.context, "⏳ Processing your request..."
+                )
+            )
 
         try:
             routing = self.settings_manager.get_channel_routing(request.settings_key)
@@ -53,6 +61,14 @@ class ClaudeAgent(BaseAgent):
 
             await self._delete_ack(context, request)
 
+            if stop_button_message_id and hasattr(
+                self.controller, "remove_stop_button"
+            ):
+                await self.controller.remove_stop_button(
+                    request.context, stop_button_message_id
+                )
+                stop_button_message_id = None
+
             if (
                 request.composite_session_id not in self.receiver_tasks
                 or self.receiver_tasks[request.composite_session_id].done()
@@ -62,7 +78,22 @@ class ClaudeAgent(BaseAgent):
                         client, request.base_session_id, request.working_path, context
                     )
                 )
+        except asyncio.CancelledError:
+            if stop_button_message_id and hasattr(
+                self.controller, "remove_stop_button"
+            ):
+                await self.controller.remove_stop_button(
+                    request.context, stop_button_message_id
+                )
+            logger.info(f"Claude request cancelled for {request.composite_session_id}")
+            raise
         except Exception as e:
+            if stop_button_message_id and hasattr(
+                self.controller, "remove_stop_button"
+            ):
+                await self.controller.remove_stop_button(
+                    request.context, stop_button_message_id
+                )
             logger.error(f"Error processing Claude message: {e}", exc_info=True)
             await self.session_handler.handle_session_error(
                 request.composite_session_id, context, e
