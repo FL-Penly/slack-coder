@@ -3,14 +3,14 @@ requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
-name = "vibe-remote"
+name = "slack-coder"
 dynamic = ["version"]
-description = "Local-first agent runtime for Slack - run AI coding agents from your chat"
+description = "Your AI coding army, commanded from Slack - enhanced OpenCode support with Chinese localization"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    { name = "cyhhao", email = "cyhhao@users.noreply.github.com" }
+    { name = "FL-Penly", email = "975638987@qq.com" }
 ]
 keywords = ["slack", "ai", "agent", "claude", "opencode", "codex", "automation"]
 classifiers = [
@@ -38,13 +38,13 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/cyhhao/vibe-remote"
-Repository = "https://github.com/cyhhao/vibe-remote"
-Documentation = "https://github.com/cyhhao/vibe-remote#readme"
-Issues = "https://github.com/cyhhao/vibe-remote/issues"
+Homepage = "https://github.com/FL-Penly/slack-coder"
+Repository = "https://github.com/FL-Penly/slack-coder"
+Documentation = "https://github.com/FL-Penly/slack-coder#readme"
+Issues = "https://github.com/FL-Penly/slack-coder/issues"
 
 [project.scripts]
-vibe = "vibe.cli:main"
+slack-coder = "vibe.cli:main"
 
 [tool.hatch.version]
 source = "vcs"
