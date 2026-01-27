@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="Vibe Remote" width="120"/>
+<img src="assets/logo.png" alt="Slack Coder" width="120"/>
 
-# Vibe Remote
+# Slack Coder
 
 ### Your AI coding army, commanded from Slack.
 
 **No laptop. No IDE. Just vibes.**
 
-[![GitHub Stars](https://img.shields.io/github/stars/cyhhao/vibe-remote?color=ffcb47&labelColor=black&style=flat-square)](https://github.com/cyhhao/vibe-remote/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/FL-Penly/slack-coder?color=ffcb47&labelColor=black&style=flat-square)](https://github.com/FL-Penly/slack-coder/stargazers)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB?labelColor=black&style=flat-square)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green?labelColor=black&style=flat-square)](LICENSE)
 
@@ -26,7 +26,7 @@ You're at the beach. Phone buzzes — production's on fire.
 
 **Old you:** Panic. Find WiFi. Open laptop. Wait for IDE. Lose your tan.
 
-**Vibe Remote you:** Open Slack. Type "Fix the auth bug in login.py". Watch Claude Code fix it in real-time. Approve. Sip margarita.
+**Slack Coder you:** Open Slack. Type "Fix the auth bug in login.py". Watch Claude Code fix it in real-time. Approve. Sip margarita.
 
 ```
 AI works. You live.
@@ -34,21 +34,28 @@ AI works. You live.
 
 ---
 
-## Install in 10 Seconds
+## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cyhhao/vibe-remote/master/install.sh | bash && vibe
+# Install with uv (recommended)
+uv tool install git+https://github.com/FL-Penly/slack-coder.git
+
+# Or with pip
+pip install git+https://github.com/FL-Penly/slack-coder.git
 ```
 
-That's it. Browser opens -> Follow the wizard -> Done.
+Then configure your Slack app tokens:
 
-<details>
-<summary><b>Windows?</b></summary>
+```bash
+# Set environment variables
+export SLACK_BOT_TOKEN="xoxb-..."
+export SLACK_APP_TOKEN="xapp-..."
 
-```powershell
-irm https://raw.githubusercontent.com/cyhhao/vibe-remote/master/install.ps1 | iex
+# Start the bot
+vibe
 ```
-</details>
+
+See [Slack Setup Guide](docs/SLACK_SETUP.md) for detailed instructions on creating your Slack app.
 
 ---
 
@@ -70,42 +77,6 @@ irm https://raw.githubusercontent.com/cyhhao/vibe-remote/master/install.ps1 | ie
 
 ## Highlights
 
-<table>
-<tr>
-<td width="33%">
-
-### Setup Wizard
-
-One-command install, guided configuration. No manual token juggling.
-
-![Setup Wizard](assets/screenshots/setup-slack-en.png)
-
-</td>
-<td width="33%">
-
-### Dashboard
-
-Real-time status, health monitoring, and quick controls.
-
-![Dashboard](assets/screenshots/dashboard-en.png)
-
-</td>
-<td width="33%">
-
-### Channel Routing
-
-Per-channel agent configuration. Different projects, different agents.
-
-![Channels](assets/screenshots/channels-en.png)
-
-</td>
-</tr>
-</table>
-
-### Instant Notifications
-
-Get notified the moment your AI finishes. Like assigning tasks to employees — delegate, go do something else, and come back when the work is done. No need to babysit.
-
 ### Thread = Session
 
 Each Slack thread is an isolated workspace. Open 5 threads, run 5 parallel tasks. Context stays separate.
@@ -116,23 +87,35 @@ When your agent needs input — file selection, confirmation, options — Slack 
 
 ![Interactive Prompts](assets/screenshots/question-en.jpg)
 
+### Instant Notifications
+
+Get notified the moment your AI finishes. Like assigning tasks to employees — delegate, go do something else, and come back when the work is done. No need to babysit.
+
+### Control Panel
+
+Open the control panel with `@bot /start` to access:
+- **Agent Settings** — Configure which agent to use per channel
+- **Working Directory** — Set the project path for your agent
+- **Session Management** — View and resume previous sessions
+- **Git Changes** — View uncommitted changes with rich diff display
+
 ---
 
 ## How It Works
 
 ```
 ┌──────────────┐         ┌──────────────┐         ┌──────────────┐
-│     You      │  Slack  │ Vibe Remote  │  stdio  │  AI Agent    │
+│     You      │  Slack  │ Slack Coder  │  stdio  │  AI Agent    │
 │  (anywhere)  │ ──────▶ │  (your Mac)  │ ──────▶ │ (your code)  │
 └──────────────┘         └──────────────┘         └──────────────┘
 ```
 
 1. **You type** in Slack: *"Add dark mode to the settings page"*
-2. **Vibe Remote** routes to your configured agent
+2. **Slack Coder** routes to your configured agent
 3. **Agent** reads your codebase, writes code, streams back
 4. **You review** in Slack, iterate in thread
 
-**Your code never leaves your machine.** Vibe Remote runs locally and connects via Slack's Socket Mode.
+**Your code never leaves your machine.** Slack Coder runs locally and connects via Slack's Socket Mode.
 
 ---
 
@@ -140,8 +123,10 @@ When your agent needs input — file selection, confirmation, options — Slack 
 
 | In Slack | What it does |
 |----------|--------------|
-| `@Vibe Remote /start` | Open control panel |
-| `/stop` | Kill current session |
+| `@bot /start` | Open control panel |
+| `@bot /stop` | Kill current session |
+| `@bot /diff` | Show git changes |
+| `@bot /sessions` | View session history |
 | Just type | Talk to your agent |
 | Reply in thread | Continue conversation |
 
@@ -154,7 +139,7 @@ When your agent needs input — file selection, confirmation, options — Slack 
 Need a different agent mid-conversation? Just prefix your message:
 
 ```
-Plan: Design a new caching layer for the API
+claude: Design a new caching layer for the API
 ```
 
 That's it. No menus, no commands. Type `AgentName:` and your message routes to that agent instantly.
@@ -171,16 +156,16 @@ Different projects, different agents:
 #prototypes  → Codex (quick experiments)
 ```
 
-Configure in web UI → Channels.
+Configure via the **Agent Settings** button in the control panel (`@bot /start`).
 
 ---
 
 ## CLI
 
 ```bash
-vibe          # Start everything
+vibe          # Start the bot
 vibe status   # Check if running
-vibe stop     # Stop everything
+vibe stop     # Stop the bot
 vibe doctor   # Diagnose issues
 ```
 
@@ -226,7 +211,7 @@ npm install -g @openai/codex
 
 ## Security
 
-- **Local-first** — Vibe Remote runs on your machine
+- **Local-first** — Slack Coder runs on your machine
 - **Socket Mode** — No public URLs, no webhooks
 - **Your tokens** — Stored in `~/.vibe_remote/`, never uploaded
 - **Your code** — Stays on your disk, sent only to your chosen AI provider
@@ -236,7 +221,7 @@ npm install -g @openai/codex
 ## Uninstall
 
 ```bash
-vibe stop && uv tool uninstall vibe-remote && rm -rf ~/.vibe_remote
+vibe stop && uv tool uninstall vibe && rm -rf ~/.vibe_remote
 ```
 
 ---
@@ -244,7 +229,7 @@ vibe stop && uv tool uninstall vibe-remote && rm -rf ~/.vibe_remote
 ## Roadmap
 
 - [ ] SaaS Mode
-- [ ] Vibe Remote Coding Agent (one agent to rule them all)
+- [ ] Custom Coding Agent (one agent to rule them all)
 - [ ] File attachments in Slack
 - [ ] Multi-workspace
 
@@ -255,23 +240,13 @@ vibe stop && uv tool uninstall vibe-remote && rm -rf ~/.vibe_remote
 - **[CLI Reference](docs/CLI.md)** — Command-line usage and service lifecycle
 - **[Slack Setup Guide](docs/SLACK_SETUP.md)** — Detailed setup with screenshots
 
-## Remote Server Tip (SSH)
-
-If you run Vibe Remote on a remote server, keep the Web UI bound to `127.0.0.1:5123` and access it via SSH port forwarding:
-
-```bash
-ssh -NL 5123:localhost:5123 user@server-ip
-```
-
-See: **[CLI Reference](docs/CLI.md)** (search for "Remote Web UI Access")
-
 ---
 
 <div align="center">
 
 **Stop context-switching. Start vibe coding.**
 
-[Install Now](#install-in-10-seconds) · [Setup Guide](docs/SLACK_SETUP.md) · [Report Bug](https://github.com/cyhhao/vibe-remote/issues)
+[Install Now](#install) · [Setup Guide](docs/SLACK_SETUP.md) · [Report Bug](https://github.com/FL-Penly/slack-coder/issues)
 
 ---
 

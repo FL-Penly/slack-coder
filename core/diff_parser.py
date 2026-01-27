@@ -253,9 +253,11 @@ def format_diff_summary(files: List[FileDiff]) -> str:
 
 
 def format_diff_as_rich_text_blocks(
-    files: List[FileDiff], max_changes_per_file: int = 8, max_files: int = 5
+    files: List[FileDiff],
+    max_changes_per_file: int = 8,
+    max_files: int = 5,
+    max_blocks: int = 80,
 ) -> List[dict]:
-    """Generate Slack Block Kit blocks using rich_text for better visual diff display."""
     if not files:
         return [
             {
@@ -268,19 +270,20 @@ def format_diff_as_rich_text_blocks(
     files_shown = 0
 
     for file_diff in files:
-        if files_shown >= max_files:
-            remaining = len(files) - max_files
-            blocks.append(
-                {
-                    "type": "context",
-                    "elements": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"_... 还有 {remaining} 个文件未显示_",
-                        }
-                    ],
-                }
-            )
+        if files_shown >= max_files or len(blocks) >= max_blocks - 5:
+            remaining = len(files) - files_shown
+            if remaining > 0:
+                blocks.append(
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": f"_... 还有 {remaining} 个文件未显示_",
+                            }
+                        ],
+                    }
+                )
             break
 
         files_shown += 1

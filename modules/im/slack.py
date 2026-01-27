@@ -1,5 +1,4 @@
 import asyncio
-import asyncio
 import hashlib
 import logging
 import time
@@ -914,9 +913,25 @@ class SlackBot(BaseIMClient):
 
     async def _handle_view_submission(self, payload: Dict[str, Any]):
         """Handle modal dialog submissions"""
-        view = payload.get("view", {})
-        callback_id = view.get("callback_id")
+        try:
+            view = payload.get("view", {})
+            callback_id = view.get("callback_id")
+            await self._process_view_submission(payload, view, callback_id)
+        except Exception as e:
+            logger.error(f"Error handling view submission: {e}", exc_info=True)
+            user_id = payload.get("user", {}).get("id")
+            if user_id:
+                try:
+                    await self.web_client.chat_postMessage(
+                        channel=user_id,
+                        text=f"❌ 操作失败: {str(e)[:100]}",
+                    )
+                except Exception:
+                    pass
 
+    async def _process_view_submission(
+        self, payload: Dict[str, Any], view: Dict[str, Any], callback_id: str
+    ):
         if callback_id == "settings_modal":
             # Handle settings modal submission
             user_id = payload.get("user", {}).get("id")
@@ -1846,7 +1861,10 @@ class SlackBot(BaseIMClient):
 
             if parsed_files:
                 diff_blocks = format_diff_as_rich_text_blocks(
-                    parsed_files, max_changes_per_file=8, max_files=6
+                    parsed_files,
+                    max_changes_per_file=8,
+                    max_files=8,
+                    max_blocks=90,
                 )
                 blocks.extend(diff_blocks)
 
