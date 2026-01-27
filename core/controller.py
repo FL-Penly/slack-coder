@@ -817,6 +817,7 @@ class Controller:
         require_mention: Optional[bool] = None,
         env_vars: Optional[Dict[str, str]] = None,
         claude_mode: Optional[str] = None,
+        claude_model: Optional[str] = None,
         claude_env_vars: Optional[Dict[str, str]] = None,
     ):
         from modules.settings_manager import ChannelRouting
@@ -828,6 +829,7 @@ class Controller:
                 opencode_model=opencode_model,
                 opencode_reasoning_effort=opencode_reasoning_effort,
                 claude_mode=claude_mode,
+                claude_model=claude_model,
                 claude_env_vars=claude_env_vars if claude_env_vars else None,
             )
 
@@ -851,6 +853,8 @@ class Controller:
                 if env_vars:
                     parts.append(f"Env Vars: **{len(env_vars)} configured**")
             elif backend == "claude":
+                if claude_model:
+                    parts.append(f"Model: **{claude_model}**")
                 if claude_mode:
                     parts.append(f"Mode: **{claude_mode}**")
                 if claude_env_vars:

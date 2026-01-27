@@ -692,10 +692,15 @@ class SlackBot(BaseIMClient):
                 f"App mention processed: original='{event.get('text')}', cleaned='{text}'"
             )
 
-            # Check if this is a command after mention
+            if not text:
+                if "start" in self.on_command_callbacks:
+                    logger.info("Empty @mention, showing welcome message")
+                    await self.on_command_callbacks["start"](context, "")
+                    return
+
             if text.startswith("/"):
                 parts = text.split(maxsplit=1)
-                command = parts[0][1:]  # Remove the /
+                command = parts[0][1:]
                 args = parts[1] if len(parts) > 1 else ""
 
                 logger.info(
@@ -710,7 +715,6 @@ class SlackBot(BaseIMClient):
                 else:
                     logger.warning(f"Command '{command}' not found in callbacks")
 
-            # Handle as regular message
             logger.info(f"Handling as regular message: '{text}'")
             if self.on_message_callback:
                 await self.on_message_callback(context, text)
@@ -1131,6 +1135,11 @@ class SlackBot(BaseIMClient):
                 if key:
                     env_vars[key] = value
 
+            claude_model_data = values.get("claude_model_block", {}).get(
+                "claude_model_select", {}
+            )
+            claude_model = claude_model_data.get("selected_option", {}).get("value")
+
             claude_mode_data = values.get("claude_mode_block", {}).get(
                 "claude_mode_select", {}
             )
@@ -1164,6 +1173,7 @@ class SlackBot(BaseIMClient):
                     require_mention,
                     env_vars,
                     claude_mode,
+                    claude_model,
                     claude_env_vars,
                 )
 
@@ -2396,6 +2406,38 @@ class SlackBot(BaseIMClient):
                 "initial_option": initial_mode,
             }
 
+            claude_model_options = [
+                {"text": {"type": "plain_text", "text": "Opus 4.5"}, "value": "opus"},
+                {
+                    "text": {"type": "plain_text", "text": "Sonnet 4.5"},
+                    "value": "sonnet",
+                },
+                {
+                    "text": {"type": "plain_text", "text": "Sonnet 4.5 (1M context)"},
+                    "value": "sonnet-1m",
+                },
+                {"text": {"type": "plain_text", "text": "Haiku 4.5"}, "value": "haiku"},
+            ]
+
+            current_claude_model = None
+            if current_routing and hasattr(current_routing, "claude_model"):
+                current_claude_model = current_routing.claude_model
+
+            initial_claude_model = claude_model_options[1]
+            if current_claude_model:
+                for opt in claude_model_options:
+                    if opt["value"] == current_claude_model:
+                        initial_claude_model = opt
+                        break
+
+            claude_model_select = {
+                "type": "static_select",
+                "action_id": "claude_model_select",
+                "placeholder": {"type": "plain_text", "text": "Select model"},
+                "options": claude_model_options,
+                "initial_option": initial_claude_model,
+            }
+
             claude_env_str = ""
             if current_claude_env_vars:
                 claude_env_str = "\n".join(
@@ -2415,6 +2457,13 @@ class SlackBot(BaseIMClient):
                             "type": "mrkdwn",
                             "text": "*Claude Code Options*",
                         },
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "claude_model_block",
+                        "optional": True,
+                        "element": claude_model_select,
+                        "label": {"type": "plain_text", "text": "Model"},
                     },
                     {
                         "type": "input",
