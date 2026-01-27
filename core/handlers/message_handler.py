@@ -380,6 +380,13 @@ class MessageHandler:
                 )
                 await self.im_client.send_message(context, info_text)
 
+            elif callback_data.startswith("exec_slash_command:"):
+                command_name = callback_data.replace("exec_slash_command:", "")
+                await self._execute_slash_command(context, command_name)
+
+            elif callback_data == "cmd_slash":
+                await self.im_client.send_command_selector(context)
+
             elif callback_data.startswith("opencode_question:"):
                 if not self.session_handler:
                     raise RuntimeError("Session handler not initialized")
@@ -456,6 +463,45 @@ class MessageHandler:
             "if this channel is routed to Codex."
         )
         await self.im_client.send_message(context, msg)
+
+    async def _execute_slash_command(self, context: MessageContext, command_name: str):
+        """Execute a slash command from ~/.claude/commands/ directory"""
+        from pathlib import Path
+
+        commands_dir = Path.home() / ".claude" / "commands"
+        command_file = commands_dir / f"{command_name}.md"
+
+        if not command_file.exists():
+            await self.im_client.send_message(
+                context, f"❌ Command `/{command_name}` not found"
+            )
+            return
+
+        command_content = command_file.read_text(encoding="utf-8")
+        message = f"/{command_name}\n\n{command_content}"
+
+        if not self.session_handler:
+            raise RuntimeError("Session handler not initialized")
+
+        base_session_id, working_path, composite_key = (
+            self.session_handler.get_session_info(context)
+        )
+        settings_key = self._get_settings_key(context)
+        agent_name = self.controller.resolve_agent_for_context(context)
+
+        request = AgentRequest(
+            context=context,
+            message=message,
+            working_path=working_path,
+            base_session_id=base_session_id,
+            composite_session_id=composite_key,
+            settings_key=settings_key,
+        )
+
+        try:
+            await self.controller.agent_service.handle_message(agent_name, request)
+        except KeyError:
+            await self._handle_missing_agent(context, agent_name)
 
     async def _delete_ack(self, channel_id: str, request: AgentRequest):
         """Delete acknowledgement message if it still exists."""

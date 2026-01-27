@@ -516,12 +516,17 @@ class SlackBot(BaseIMClient):
                 response = SocketModeResponse(envelope_id=req.envelope_id)
                 await client.send_socket_mode_response(response)
             elif req.type == "interactive":
-                # For interactive components, acknowledge FIRST to avoid Slack timeout
-                # This is important for long-running operations like updates
-                response = SocketModeResponse(envelope_id=req.envelope_id)
-                await client.send_socket_mode_response(response)
-                # Then handle the interaction
-                await self._handle_interactive(req.payload)
+                payload_type = req.payload.get("type", "")
+                if payload_type == "block_suggestion":
+                    options_response = await self._handle_block_suggestion(req.payload)
+                    response = SocketModeResponse(
+                        envelope_id=req.envelope_id, payload=options_response
+                    )
+                    await client.send_socket_mode_response(response)
+                else:
+                    response = SocketModeResponse(envelope_id=req.envelope_id)
+                    await client.send_socket_mode_response(response)
+                    await self._handle_interactive(req.payload)
             else:
                 # Unknown request type, still acknowledge
                 response = SocketModeResponse(envelope_id=req.envelope_id)
@@ -630,10 +635,14 @@ class SlackBot(BaseIMClient):
                 platform_specific={"team_id": payload.get("team_id"), "event": event},
             )
 
-            # Handle slash commands in regular messages
+            if text == "/":
+                logger.info("Slash-only message, showing command selector")
+                await self.send_command_selector(context)
+                return
+
             if text.startswith("/"):
                 parts = text.split(maxsplit=1)
-                command = parts[0][1:]  # Remove the /
+                command = parts[0][1:]
                 args = parts[1] if len(parts) > 1 else ""
 
                 if command in self.on_command_callbacks:
@@ -690,6 +699,11 @@ class SlackBot(BaseIMClient):
                     logger.info("Empty @mention, showing welcome message")
                     await self.on_command_callbacks["start"](context, "")
                     return
+
+            if text == "/":
+                logger.info("Slash-only message, showing command selector")
+                await self.send_command_selector(context)
+                return
 
             if text.startswith("/"):
                 parts = text.split(maxsplit=1)
@@ -862,6 +876,29 @@ class SlackBot(BaseIMClient):
                                 user.get("id"),
                                 action_id,
                                 selected_value,
+                            )
+                    elif action_id == "slash_command_select":
+                        selected_option = action.get("selected_option", {})
+                        selected_command = selected_option.get("value")
+                        if selected_command and self.on_callback_query_callback:
+                            thread_id = (
+                                payload.get("container", {}).get("thread_ts")
+                                or payload.get("message", {}).get("thread_ts")
+                                or payload.get("message", {}).get("ts")
+                            )
+                            context = MessageContext(
+                                user_id=user.get("id"),
+                                channel_id=channel_id,
+                                thread_id=thread_id,
+                                message_id=payload.get("message", {}).get("ts"),
+                                platform_specific={
+                                    "trigger_id": payload.get("trigger_id"),
+                                    "response_url": payload.get("response_url"),
+                                    "payload": payload,
+                                },
+                            )
+                            await self.on_callback_query_callback(
+                                context, f"exec_slash_command:{selected_command}"
                             )
 
         elif payload.get("type") == "view_submission":
@@ -1122,6 +1159,78 @@ class SlackBot(BaseIMClient):
             )
             if hasattr(self, "_on_home_env_save"):
                 await self._on_home_env_save(user_id, env_type, env_vars)
+
+    async def _handle_block_suggestion(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle external_select options requests for dynamic command selection"""
+        action_id = payload.get("action_id", "")
+        value = payload.get("value", "")
+
+        if action_id == "slash_command_select":
+            return await self._get_slash_command_options(value)
+
+        return {"options": []}
+
+    async def _get_slash_command_options(self, keyword: str) -> Dict[str, Any]:
+        """Get slash command options from ~/.claude/commands/ directory"""
+        import os
+        from pathlib import Path
+
+        commands_dir = Path.home() / ".claude" / "commands"
+        options = []
+
+        if commands_dir.exists():
+            for cmd_file in sorted(commands_dir.glob("*.md")):
+                cmd_name = cmd_file.stem
+                if not keyword or keyword.lower() in cmd_name.lower():
+                    options.append(
+                        {
+                            "text": {"type": "plain_text", "text": f"/{cmd_name}"},
+                            "value": cmd_name,
+                        }
+                    )
+
+        return {"options": options[:100]}
+
+    async def send_command_selector(
+        self,
+        context: MessageContext,
+        thread_ts: Optional[str] = None,
+    ) -> str:
+        """Send a message with external_select for slash command selection"""
+        self._ensure_clients()
+
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "*Select a command:*",
+                },
+                "accessory": {
+                    "type": "external_select",
+                    "action_id": "slash_command_select",
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "Type to search commands...",
+                    },
+                    "min_query_length": 0,
+                },
+            }
+        ]
+
+        kwargs = {
+            "channel": context.channel_id,
+            "text": "Select a command",
+            "blocks": blocks,
+        }
+
+        if thread_ts:
+            kwargs["thread_ts"] = thread_ts
+        elif context.thread_id:
+            kwargs["thread_ts"] = context.thread_id
+
+        response = await self.web_client.chat_postMessage(**kwargs)
+        return response["ts"]
 
     def run(self):
         """Run the Slack bot"""
