@@ -18,6 +18,7 @@ from core.handlers import (
     MessageHandler,
 )
 from core.update_checker import UpdateChecker
+from core.gist_service import check_and_create_diff_gist
 
 logger = logging.getLogger(__name__)
 
@@ -298,6 +299,52 @@ class Controller:
         keep = max(0, max_chars - len(prefix) - len(suffix))
         return f"{prefix}{text[:keep]}{suffix}"
 
+    async def _send_diff_gist_notification(
+        self, context: MessageContext, target_context: MessageContext
+    ):
+        try:
+            working_path = self.get_cwd(context)
+            gist_url, stat_summary, error = await check_and_create_diff_gist(
+                working_path
+            )
+
+            if error:
+                logger.debug(f"Gist creation skipped or failed: {error}")
+                return
+
+            if not gist_url:
+                return
+
+            lines = stat_summary.strip().split("\n") if stat_summary else []
+            file_count = len([l for l in lines if "|" in l])
+            last_line = lines[-1] if lines else ""
+
+            stats_info = ""
+            if last_line and ("insertion" in last_line or "deletion" in last_line):
+                stats_info = f" ({last_line.strip()})"
+
+            message = (
+                f"📝 *本轮对话有代码变更*\n\n"
+                f"📊 {file_count} 个文件变更{stats_info}\n\n"
+                f"🔗 <{gist_url}|点击查看 Diff>"
+            )
+
+            from modules.im import InlineKeyboard, InlineButton
+
+            keyboard = InlineKeyboard(
+                [
+                    [
+                        InlineButton("↩️ 撤销变更", callback_data="revert_changes"),
+                    ]
+                ]
+            )
+            await self.im_client.send_message_with_buttons(
+                target_context, message, keyboard
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to send diff gist notification: {e}")
+
     def _truncate_consolidated(self, text: str, max_bytes: int) -> str:
         """Truncate text to fit within max_bytes (UTF-8 encoded)."""
         if self._get_text_byte_length(text) <= max_bytes:
@@ -396,30 +443,31 @@ class Controller:
                 await self.im_client.send_message(
                     target_context, text, parse_mode=parse_mode
                 )
-                return
+            else:
+                summary = self._build_result_summary(text, self._get_result_max_chars())
+                await self.im_client.send_message(
+                    target_context, summary, parse_mode=parse_mode
+                )
 
-            summary = self._build_result_summary(text, self._get_result_max_chars())
-            await self.im_client.send_message(
-                target_context, summary, parse_mode=parse_mode
-            )
+                if self.config.platform == "slack" and hasattr(
+                    self.im_client, "upload_markdown"
+                ):
+                    try:
+                        await self.im_client.upload_markdown(
+                            target_context,
+                            title="result.md",
+                            content=text,
+                            filetype="markdown",
+                        )
+                    except Exception as err:
+                        logger.warning(f"Failed to upload result attachment: {err}")
+                        await self.im_client.send_message(
+                            target_context,
+                            "无法上传附件（缺少 files:write 权限或上传失败）。需要我改成分条发送吗？",
+                            parse_mode=parse_mode,
+                        )
 
-            if self.config.platform == "slack" and hasattr(
-                self.im_client, "upload_markdown"
-            ):
-                try:
-                    await self.im_client.upload_markdown(
-                        target_context,
-                        title="result.md",
-                        content=text,
-                        filetype="markdown",
-                    )
-                except Exception as err:
-                    logger.warning(f"Failed to upload result attachment: {err}")
-                    await self.im_client.send_message(
-                        target_context,
-                        "无法上传附件（缺少 files:write 权限或上传失败）。需要我改成分条发送吗？",
-                        parse_mode=parse_mode,
-                    )
+            await self._send_diff_gist_notification(context, target_context)
             return
 
         # Log Messages: system/assistant/toolcall - consolidated into editable message

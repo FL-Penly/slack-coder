@@ -405,6 +405,9 @@ class MessageHandler:
                 )
                 await self.controller.agent_service.handle_message("opencode", request)
 
+            elif callback_data == "revert_changes":
+                await command_handlers.handle_revert_changes(context)
+
             else:
                 logger.warning(f"Unknown callback data: {callback_data}")
                 await self.im_client.send_message(
