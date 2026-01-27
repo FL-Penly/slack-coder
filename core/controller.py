@@ -34,10 +34,10 @@ class Controller:
         self.receiver_tasks: Dict[str, asyncio.Task] = {}
         self.stored_session_mappings: Dict[str, str] = {}
 
-        # Consolidated message tracking (system/assistant/toolcall)
         self._consolidated_message_ids: Dict[str, str] = {}
         self._consolidated_message_buffers: Dict[str, str] = {}
         self._consolidated_message_locks: Dict[str, asyncio.Lock] = {}
+        self._home_selected_channels: Dict[str, str] = {}
 
         # Initialize core modules
         self._init_modules()
@@ -150,6 +150,11 @@ class Controller:
             on_routing_update=self.handle_routing_update,
             on_routing_modal_update=self.handle_routing_modal_update,
             on_ready=self._on_im_ready,
+            on_app_home_opened=self.handle_app_home_opened,
+            on_home_setting_change=self.handle_home_setting_change,
+            on_home_edit_env=self.handle_home_edit_env,
+            on_home_env_save=self.handle_home_env_save,
+            on_home_channel_select=self.handle_home_channel_select,
         )
 
     async def _on_im_ready(self):
@@ -747,7 +752,9 @@ class Controller:
                 selected_value = selected_option.get("value")
 
             if isinstance(action_id, str) and isinstance(selected_value, str):
-                if action_id == "opencode_agent_select":
+                if action_id == "backend_select":
+                    selected_backend = selected_value
+                elif action_id == "opencode_agent_select":
                     oc_agent = selected_value
                 elif action_id == "opencode_model_select":
                     oc_model = selected_value
@@ -799,7 +806,6 @@ class Controller:
         except Exception as e:
             logger.error(f"Error updating routing modal: {e}", exc_info=True)
 
-    # Routing update handler (for Slack modal)
     async def handle_routing_update(
         self,
         user_id: str,
@@ -810,6 +816,8 @@ class Controller:
         opencode_reasoning_effort: Optional[str] = None,
         require_mention: Optional[bool] = None,
         env_vars: Optional[Dict[str, str]] = None,
+        claude_mode: Optional[str] = None,
+        claude_env_vars: Optional[Dict[str, str]] = None,
     ):
         from modules.settings_manager import ChannelRouting
 
@@ -819,6 +827,8 @@ class Controller:
                 opencode_agent=opencode_agent,
                 opencode_model=opencode_model,
                 opencode_reasoning_effort=opencode_reasoning_effort,
+                claude_mode=claude_mode,
+                claude_env_vars=claude_env_vars if claude_env_vars else None,
             )
 
             settings_key = channel_id if channel_id else user_id
@@ -840,6 +850,11 @@ class Controller:
                     parts.append(f"Reasoning Effort: **{opencode_reasoning_effort}**")
                 if env_vars:
                     parts.append(f"Env Vars: **{len(env_vars)} configured**")
+            elif backend == "claude":
+                if claude_mode:
+                    parts.append(f"Mode: **{claude_mode}**")
+                if claude_env_vars:
+                    parts.append(f"Env Vars: **{len(claude_env_vars)} configured**")
 
             if require_mention is None:
                 parts.append("Require @mention: **(Default)**")
@@ -909,7 +924,187 @@ class Controller:
         except Exception:
             return {}
 
-    # Main run method
+    async def handle_app_home_opened(
+        self, user_id: str, selected_channel_id: Optional[str] = None
+    ):
+        try:
+            all_backends = list(self.agent_service.agents.keys())
+            registered_backends = sorted(
+                all_backends, key=lambda x: (x != "opencode", x)
+            )
+
+            channels = []
+            if hasattr(self.im_client, "get_bot_channels"):
+                channels = await self.im_client.get_bot_channels()
+
+            if not selected_channel_id:
+                selected_channel_id = self._home_selected_channels.get(user_id)
+
+            if not selected_channel_id and channels:
+                selected_channel_id = channels[0]["id"]
+
+            if selected_channel_id:
+                self._home_selected_channels[user_id] = selected_channel_id
+
+            if selected_channel_id:
+                context = MessageContext(
+                    user_id=user_id,
+                    channel_id=selected_channel_id,
+                    platform_specific={},
+                )
+            else:
+                context = MessageContext(
+                    user_id=user_id, channel_id=user_id, platform_specific={}
+                )
+
+            current_backend = self.resolve_agent_for_context(context)
+            settings_key = self._get_settings_key(context)
+            current_routing = self.settings_manager.get_channel_routing(settings_key)
+
+            opencode_agents = []
+            opencode_models = {}
+            opencode_default_config = {}
+
+            if "opencode" in registered_backends:
+                try:
+                    opencode_agent = self.agent_service.agents.get("opencode")
+                    if opencode_agent and hasattr(opencode_agent, "_get_server"):
+                        server = await opencode_agent._get_server()
+                        await server.ensure_running()
+                        cwd = self.get_cwd(context)
+                        opencode_agents = await server.get_available_agents(cwd)
+                        opencode_models = await server.get_available_models(cwd)
+                        opencode_default_config = await server.get_default_config(cwd)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch OpenCode data for App Home: {e}")
+
+            current_env_vars = self._get_opencode_env_vars()
+            claude_env_vars = (
+                current_routing.claude_env_vars if current_routing else None
+            )
+
+            if hasattr(self.im_client, "publish_app_home"):
+                await self.im_client.publish_app_home(
+                    user_id=user_id,
+                    registered_backends=registered_backends,
+                    current_backend=current_backend,
+                    opencode_agents=opencode_agents,
+                    opencode_models=opencode_models,
+                    opencode_default_config=opencode_default_config,
+                    current_routing=current_routing,
+                    current_env_vars=current_env_vars,
+                    current_claude_env_vars=claude_env_vars,
+                    channels=channels,
+                    selected_channel_id=selected_channel_id,
+                )
+        except Exception as e:
+            logger.error(f"Error handling app_home_opened: {e}", exc_info=True)
+
+    async def handle_home_setting_change(
+        self, user_id: str, action_id: str, value: str
+    ):
+        from modules.settings_manager import ChannelRouting
+
+        try:
+            selected_channel_id = self._home_selected_channels.get(user_id)
+            settings_key = selected_channel_id if selected_channel_id else user_id
+            current_routing = self.settings_manager.get_channel_routing(settings_key)
+
+            if current_routing is None:
+                current_routing = ChannelRouting()
+
+            if value == "__default__":
+                value = None
+
+            if action_id == "home_backend_select":
+                current_routing.agent_backend = value
+            elif action_id == "home_opencode_agent_select":
+                current_routing.opencode_agent = value
+            elif action_id == "home_opencode_model_select":
+                current_routing.opencode_model = value
+            elif action_id == "home_opencode_reasoning_select":
+                current_routing.opencode_reasoning_effort = value
+            elif action_id == "home_claude_mode_select":
+                current_routing.claude_mode = value
+            elif action_id == "home_claude_model_select":
+                current_routing.claude_model = value
+
+            self.settings_manager.set_channel_routing(settings_key, current_routing)
+            logger.info(
+                f"App Home setting changed: {action_id}={value} for channel {settings_key}"
+            )
+
+            await self.handle_app_home_opened(
+                user_id, selected_channel_id=selected_channel_id
+            )
+
+        except Exception as e:
+            logger.error(f"Error handling home setting change: {e}", exc_info=True)
+
+    async def handle_home_channel_select(self, user_id: str, channel_id: str):
+        try:
+            self._home_selected_channels[user_id] = channel_id
+            await self.handle_app_home_opened(user_id, selected_channel_id=channel_id)
+        except Exception as e:
+            logger.error(f"Error handling home channel select: {e}", exc_info=True)
+
+    async def handle_home_edit_env(self, user_id: str, action_id: str, trigger_id: str):
+        """Handle Edit button click for environment variables in App Home."""
+        try:
+            if action_id == "home_edit_opencode_env":
+                env_type = "opencode"
+                current_env_vars = self._get_opencode_env_vars()
+            elif action_id == "home_edit_claude_env":
+                env_type = "claude"
+                settings_key = user_id
+                current_routing = self.settings_manager.get_channel_routing(
+                    settings_key
+                )
+                current_env_vars = (
+                    current_routing.claude_env_vars if current_routing else None
+                ) or {}
+            else:
+                logger.warning(f"Unknown env edit action: {action_id}")
+                return
+
+            if hasattr(self.im_client, "open_env_vars_modal"):
+                await self.im_client.open_env_vars_modal(
+                    trigger_id=trigger_id,
+                    user_id=user_id,
+                    env_type=env_type,
+                    current_env_vars=current_env_vars,
+                )
+        except Exception as e:
+            logger.error(f"Error handling home edit env: {e}", exc_info=True)
+
+    async def handle_home_env_save(
+        self, user_id: str, env_type: str, env_vars: Dict[str, str]
+    ):
+        """Handle saving environment variables from App Home modal."""
+        from modules.settings_manager import ChannelRouting
+
+        try:
+            if env_type == "opencode":
+                await self._update_opencode_env_vars(env_vars)
+                logger.info(
+                    f"Updated OpenCode env vars from App Home for user {user_id}"
+                )
+            elif env_type == "claude":
+                settings_key = user_id
+                current_routing = self.settings_manager.get_channel_routing(
+                    settings_key
+                )
+                if current_routing is None:
+                    current_routing = ChannelRouting()
+                current_routing.claude_env_vars = env_vars
+                self.settings_manager.set_channel_routing(settings_key, current_routing)
+                logger.info(f"Updated Claude env vars from App Home for user {user_id}")
+
+            await self.handle_app_home_opened(user_id)
+
+        except Exception as e:
+            logger.error(f"Error handling home env save: {e}", exc_info=True)
+
     def run(self):
         """Run the controller"""
         logger.info(

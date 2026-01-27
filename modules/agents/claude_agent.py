@@ -30,16 +30,23 @@ class ClaudeAgent(BaseAgent):
         context = request.context
 
         try:
+            routing = self.settings_manager.get_channel_routing(request.settings_key)
+            claude_mode = routing.claude_mode if routing else None
+            claude_model = routing.claude_model if routing else None
+            claude_env_vars = routing.claude_env_vars if routing else None
+
+            model_to_use = request.subagent_model or claude_model or "sonnet"
+
             client = await self.session_handler.get_or_create_claude_session(
                 context,
                 subagent_name=request.subagent_name,
-                subagent_model=request.subagent_model,
+                subagent_model=model_to_use,
                 subagent_reasoning_effort=request.subagent_reasoning_effort,
+                claude_mode=claude_mode,
+                claude_env_vars=claude_env_vars,
             )
 
-            await client.query(
-                request.message, session_id=request.composite_session_id
-            )
+            await client.query(request.message, session_id=request.composite_session_id)
             logger.info(
                 f"Sent message to Claude for session {request.composite_session_id}"
             )
@@ -172,7 +179,9 @@ class ClaudeAgent(BaseAgent):
                         if assistant_text:
                             self._last_assistant_text[composite_key] = assistant_text
 
-                        pending = self._pending_assistant_message.pop(composite_key, None)
+                        pending = self._pending_assistant_message.pop(
+                            composite_key, None
+                        )
                         if pending:
                             await self.controller.emit_agent_message(
                                 context,
@@ -193,7 +202,9 @@ class ClaudeAgent(BaseAgent):
                             formatted_assistant = formatter.format_assistant_message(
                                 text_parts
                             )
-                            self._pending_assistant_message[composite_key] = formatted_assistant
+                            self._pending_assistant_message[composite_key] = (
+                                formatted_assistant
+                            )
                         continue
 
                     if message_type == "system":
@@ -213,7 +224,9 @@ class ClaudeAgent(BaseAgent):
                         continue
 
                     if message_type == "result":
-                        pending = self._pending_assistant_message.pop(composite_key, None)
+                        pending = self._pending_assistant_message.pop(
+                            composite_key, None
+                        )
                         result_text = getattr(message, "result", None)
                         used_fallback = False
                         if not result_text:
@@ -327,7 +340,9 @@ class ClaudeAgent(BaseAgent):
             if isinstance(block, TextBlock):
                 text = block.text.strip() if block.text else ""
                 if text:
-                    parts.append(self.claude_client.formatter.escape_special_chars(text))
+                    parts.append(
+                        self.claude_client.formatter.escape_special_chars(text)
+                    )
         return "\n\n".join(parts).strip()
 
     def _detect_message_type(self, message) -> Optional[str]:

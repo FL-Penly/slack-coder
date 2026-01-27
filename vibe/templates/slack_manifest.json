@@ -51,6 +51,7 @@
         "message.im",
         "message.mpim",
         "app_mention",
+        "app_home_opened",
         "reaction_added",
         "reaction_removed"
       ]

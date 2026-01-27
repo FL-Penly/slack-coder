@@ -3,7 +3,7 @@ import asyncio
 import hashlib
 import logging
 import time
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 from slack_sdk.web.async_client import AsyncWebClient
 from slack_sdk.socket_mode.aiohttp import SocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
@@ -715,6 +715,12 @@ class SlackBot(BaseIMClient):
             if self.on_message_callback:
                 await self.on_message_callback(context, text)
 
+        elif event_type == "app_home_opened":
+            user_id = event.get("user")
+            tab = event.get("tab")
+            if tab == "home" and hasattr(self, "_on_app_home_opened"):
+                await self._on_app_home_opened(user_id)
+
     async def _handle_slash_command(self, payload: Dict[str, Any]):
         """Handle native Slack slash commands"""
         command = payload.get("command", "").lstrip("/")
@@ -842,6 +848,17 @@ class SlackBot(BaseIMClient):
                 if action_type == "button":
                     callback_data = action.get("action_id")
 
+                    if callback_data in {
+                        "home_edit_opencode_env",
+                        "home_edit_claude_env",
+                    }:
+                        trigger_id = payload.get("trigger_id")
+                        if trigger_id and hasattr(self, "_on_home_edit_env"):
+                            await self._on_home_edit_env(
+                                user.get("id"), callback_data, trigger_id
+                            )
+                        continue
+
                     if self.on_callback_query_callback:
                         thread_id = (
                             payload.get("container", {}).get("thread_ts")
@@ -883,6 +900,7 @@ class SlackBot(BaseIMClient):
                                 context, f"resume_session:{selected_session_id}"
                             )
                     elif action_id in {
+                        "backend_select",
                         "opencode_agent_select",
                         "opencode_model_select",
                     }:
@@ -893,6 +911,30 @@ class SlackBot(BaseIMClient):
                                 channel_from_view or channel_id,
                                 view,
                                 action,
+                            )
+                    elif action_id == "home_channel_select":
+                        if hasattr(self, "_on_home_channel_select"):
+                            selected_option = action.get("selected_option", {})
+                            selected_channel_id = selected_option.get("value")
+                            await self._on_home_channel_select(
+                                user.get("id"),
+                                selected_channel_id,
+                            )
+                    elif action_id in {
+                        "home_backend_select",
+                        "home_opencode_agent_select",
+                        "home_opencode_model_select",
+                        "home_opencode_reasoning_select",
+                        "home_claude_mode_select",
+                        "home_claude_model_select",
+                    }:
+                        if hasattr(self, "_on_home_setting_change"):
+                            selected_option = action.get("selected_option", {})
+                            selected_value = selected_option.get("value")
+                            await self._on_home_setting_change(
+                                user.get("id"),
+                                action_id,
+                                selected_value,
                             )
 
         elif payload.get("type") == "view_submission":
@@ -1089,6 +1131,28 @@ class SlackBot(BaseIMClient):
                 if key:
                     env_vars[key] = value
 
+            claude_mode_data = values.get("claude_mode_block", {}).get(
+                "claude_mode_select", {}
+            )
+            claude_mode = claude_mode_data.get("selected_option", {}).get("value")
+            if claude_mode == "__default__":
+                claude_mode = None
+
+            claude_env_vars_data = values.get("claude_env_vars_block", {}).get(
+                "claude_env_vars_input", {}
+            )
+            claude_env_vars_text = claude_env_vars_data.get("value", "") or ""
+            claude_env_vars: Dict[str, str] = {}
+            for line in claude_env_vars_text.strip().split("\n"):
+                line = line.strip()
+                if not line or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip()
+                if key:
+                    claude_env_vars[key] = value
+
             if hasattr(self, "_on_routing_update"):
                 await self._on_routing_update(
                     user_id,
@@ -1099,7 +1163,32 @@ class SlackBot(BaseIMClient):
                     oc_reasoning,
                     require_mention,
                     env_vars,
+                    claude_mode,
+                    claude_env_vars,
                 )
+
+        elif callback_id in {"home_env_modal_opencode", "home_env_modal_claude"}:
+            user_id = payload.get("user", {}).get("id")
+            values = view.get("state", {}).get("values", {})
+
+            env_vars_data = values.get("env_vars_block", {}).get("env_vars_input", {})
+            env_vars_text = env_vars_data.get("value", "") or ""
+            env_vars: Dict[str, str] = {}
+            for line in env_vars_text.strip().split("\n"):
+                line = line.strip()
+                if not line or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip()
+                if key:
+                    env_vars[key] = value
+
+            env_type = (
+                "opencode" if callback_id == "home_env_modal_opencode" else "claude"
+            )
+            if hasattr(self, "_on_home_env_save"):
+                await self._on_home_env_save(user_id, env_type, env_vars)
 
     def run(self):
         """Run the Slack bot"""
@@ -1236,6 +1325,36 @@ class SlackBot(BaseIMClient):
         except SlackApiError as e:
             logger.error(f"Error getting channel info: {e}")
             raise
+
+    async def get_bot_channels(self) -> List[Dict[str, Any]]:
+        """Get list of channels the bot is a member of."""
+        self._ensure_clients()
+        channels = []
+        cursor = None
+        try:
+            while True:
+                response = await self.web_client.conversations_list(
+                    types="public_channel,private_channel",
+                    exclude_archived=True,
+                    limit=200,
+                    cursor=cursor,
+                )
+                for channel in response.get("channels", []):
+                    if channel.get("is_member", False):
+                        channels.append(
+                            {
+                                "id": channel.get("id"),
+                                "name": channel.get("name"),
+                                "is_private": channel.get("is_private", False),
+                            }
+                        )
+                cursor = response.get("response_metadata", {}).get("next_cursor")
+                if not cursor:
+                    break
+            return sorted(channels, key=lambda x: x.get("name", "").lower())
+        except SlackApiError as e:
+            logger.error(f"Error getting bot channels: {e}")
+            return []
 
     def format_markdown(self, text: str) -> str:
         """Format markdown text for Slack mrkdwn format
@@ -1730,9 +1849,11 @@ class SlackBot(BaseIMClient):
         selected_opencode_agent: object = _UNSET,
         selected_opencode_model: object = _UNSET,
         selected_opencode_reasoning: object = _UNSET,
-        current_require_mention: object = _UNSET,  # None=default, True, False
+        current_require_mention: object = _UNSET,
         global_require_mention: bool = False,
         current_env_vars: Optional[Dict[str, str]] = None,
+        current_claude_mode: object = _UNSET,
+        current_claude_env_vars: Optional[Dict[str, str]] = None,
     ) -> dict:
         """Build modal view for agent/model routing settings."""
         # Build backend options
@@ -1784,6 +1905,7 @@ class SlackBot(BaseIMClient):
             {
                 "type": "input",
                 "block_id": "backend_block",
+                "dispatch_action": True,
                 "element": backend_select,
                 "label": {"type": "plain_text", "text": "Backend"},
             },
@@ -1839,8 +1961,8 @@ class SlackBot(BaseIMClient):
             }
         )
 
-        # OpenCode-specific options (only if opencode is registered)
-        if "opencode" in registered_backends:
+        # OpenCode-specific options (only if opencode is selected as backend)
+        if "opencode" in registered_backends and selected_backend_value == "opencode":
             # Get current opencode settings
             if selected_opencode_agent is _UNSET:
                 current_oc_agent = (
@@ -2223,7 +2345,7 @@ class SlackBot(BaseIMClient):
                             "multiline": True,
                             "placeholder": {
                                 "type": "plain_text",
-                                "text": "GOOGLE_CLOUD_PROJECT=your-project\nVERTEX_LOCATION=us-east5",
+                                "text": "KEY=value\nANOTHER_KEY=another_value",
                             },
                             "initial_value": env_vars_str,
                         },
@@ -2244,18 +2366,84 @@ class SlackBot(BaseIMClient):
                 ]
             )
 
-        # Add tip
-        blocks.append(
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": "_💡 Select (Default) to use OpenCode's configured defaults._",
-                    }
-                ],
+        if "claude" in registered_backends and selected_backend_value == "claude":
+            claude_mode = None
+            if current_claude_mode is not _UNSET:
+                claude_mode = current_claude_mode
+            elif current_routing and hasattr(current_routing, "claude_mode"):
+                claude_mode = current_routing.claude_mode
+
+            mode_options = [
+                {
+                    "text": {"type": "plain_text", "text": "(Default) - Normal"},
+                    "value": "__default__",
+                },
+                {
+                    "text": {"type": "plain_text", "text": "Plan Mode"},
+                    "value": "plan",
+                },
+            ]
+
+            initial_mode = mode_options[0]
+            if claude_mode == "plan":
+                initial_mode = mode_options[1]
+
+            mode_select = {
+                "type": "static_select",
+                "action_id": "claude_mode_select",
+                "placeholder": {"type": "plain_text", "text": "Select mode"},
+                "options": mode_options,
+                "initial_option": initial_mode,
             }
-        )
+
+            claude_env_str = ""
+            if current_claude_env_vars:
+                claude_env_str = "\n".join(
+                    f"{k}={v}" for k, v in current_claude_env_vars.items()
+                )
+            elif current_routing and hasattr(current_routing, "claude_env_vars"):
+                env_vars = current_routing.claude_env_vars
+                if env_vars:
+                    claude_env_str = "\n".join(f"{k}={v}" for k, v in env_vars.items())
+
+            blocks.extend(
+                [
+                    {"type": "divider"},
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "*Claude Code Options*",
+                        },
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "claude_mode_block",
+                        "optional": True,
+                        "element": mode_select,
+                        "label": {"type": "plain_text", "text": "Mode"},
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "claude_env_vars_block",
+                        "optional": True,
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "claude_env_vars_input",
+                            "multiline": True,
+                            "placeholder": {
+                                "type": "plain_text",
+                                "text": "KEY=value\nANOTHER_KEY=another_value",
+                            },
+                            "initial_value": claude_env_str,
+                        },
+                        "label": {
+                            "type": "plain_text",
+                            "text": "Environment Variables (KEY=VALUE, one per line)",
+                        },
+                    },
+                ]
+            )
 
         return {
             "type": "modal",
@@ -2382,13 +2570,14 @@ class SlackBot(BaseIMClient):
         channel_id: str,
         registered_backends: list,
         current_backend: str,
-        current_routing,  # Optional[ChannelRouting]
+        current_routing,
         opencode_agents: list,
         opencode_models: dict,
         opencode_default_config: dict,
-        current_require_mention: object = None,  # None=default, True, False
+        current_require_mention: object = None,
         global_require_mention: bool = False,
         current_env_vars: Optional[Dict[str, str]] = None,
+        current_claude_env_vars: Optional[Dict[str, str]] = None,
     ):
         self._ensure_clients()
 
@@ -2403,6 +2592,7 @@ class SlackBot(BaseIMClient):
             current_require_mention=current_require_mention,
             global_require_mention=global_require_mention,
             current_env_vars=current_env_vars,
+            current_claude_env_vars=current_claude_env_vars,
         )
 
         try:
@@ -2429,6 +2619,7 @@ class SlackBot(BaseIMClient):
         current_require_mention: object = None,
         global_require_mention: bool = False,
         current_env_vars: Optional[Dict[str, str]] = None,
+        current_claude_env_vars: Optional[Dict[str, str]] = None,
     ) -> None:
         self._ensure_clients()
 
@@ -2447,6 +2638,7 @@ class SlackBot(BaseIMClient):
             current_require_mention=current_require_mention,
             global_require_mention=global_require_mention,
             current_env_vars=current_env_vars,
+            current_claude_env_vars=current_claude_env_vars,
         )
 
         try:
@@ -2496,6 +2688,21 @@ class SlackBot(BaseIMClient):
         # Register on_ready handler (called when connected)
         if "on_ready" in kwargs:
             self._on_ready = kwargs["on_ready"]
+
+        if "on_app_home_opened" in kwargs:
+            self._on_app_home_opened = kwargs["on_app_home_opened"]
+
+        if "on_home_setting_change" in kwargs:
+            self._on_home_setting_change = kwargs["on_home_setting_change"]
+
+        if "on_home_edit_env" in kwargs:
+            self._on_home_edit_env = kwargs["on_home_edit_env"]
+
+        if "on_home_env_save" in kwargs:
+            self._on_home_env_save = kwargs["on_home_env_save"]
+
+        if "on_home_channel_select" in kwargs:
+            self._on_home_channel_select = kwargs["on_home_channel_select"]
 
     async def get_or_create_thread(
         self, channel_id: str, user_id: str
@@ -2549,3 +2756,507 @@ class SlackBot(BaseIMClient):
             )
         except Exception as e:
             logger.error(f"Failed to send unauthorized message to {channel_id}: {e}")
+
+    def _build_app_home_view(
+        self,
+        user_id: str,
+        registered_backends: list,
+        current_backend: str,
+        opencode_agents: list,
+        opencode_models: dict,
+        opencode_default_config: dict,
+        current_routing,
+        global_require_mention: bool = False,
+        current_env_vars: Optional[Dict[str, str]] = None,
+        current_claude_env_vars: Optional[Dict[str, str]] = None,
+        status_info: Optional[Dict[str, Any]] = None,
+        channels: Optional[List[Dict[str, Any]]] = None,
+        selected_channel_id: Optional[str] = None,
+    ) -> dict:
+        backend_display_names = {
+            "claude": "Claude Code",
+            "codex": "Codex",
+            "opencode": "OpenCode",
+        }
+
+        current_backend_display = backend_display_names.get(
+            current_backend, current_backend
+        )
+
+        selected_channel_name = None
+        if channels and selected_channel_id:
+            for ch in channels:
+                if ch["id"] == selected_channel_id:
+                    prefix = "🔒 " if ch.get("is_private") else "#"
+                    selected_channel_name = f"{prefix}{ch['name']}"
+                    break
+
+        blocks: list[Dict[str, Any]] = [
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": "🤖 Slack Coder", "emoji": True},
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "*Status:* 🟢 Running",
+                },
+            },
+            {"type": "divider"},
+        ]
+
+        if channels:
+            channel_options = []
+            initial_channel = None
+            for ch in channels:
+                prefix = "🔒 " if ch.get("is_private") else "#"
+                option = {
+                    "text": {
+                        "type": "plain_text",
+                        "text": f"{prefix}{ch['name']}"[:75],
+                    },
+                    "value": ch["id"],
+                }
+                channel_options.append(option)
+                if ch["id"] == selected_channel_id:
+                    initial_channel = option
+
+            if not initial_channel and channel_options:
+                initial_channel = channel_options[0]
+
+            blocks.append(
+                {
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "📺 Channel Settings",
+                        "emoji": True,
+                    },
+                }
+            )
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "*Select Channel*"},
+                    "accessory": {
+                        "type": "static_select",
+                        "action_id": "home_channel_select",
+                        "options": channel_options[:100],
+                        "initial_option": initial_channel,
+                    },
+                }
+            )
+            if selected_channel_name:
+                blocks.append(
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": f"Configuring: *{selected_channel_name}* | Backend: *{current_backend_display}*",
+                            }
+                        ],
+                    }
+                )
+            blocks.append({"type": "divider"})
+
+        blocks.append(
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "⚙️ Agent Settings",
+                    "emoji": True,
+                },
+            }
+        )
+
+        backend_options = []
+        for backend in registered_backends:
+            display_name = backend_display_names.get(backend, backend.capitalize())
+            backend_options.append(
+                {
+                    "text": {"type": "plain_text", "text": display_name},
+                    "value": backend,
+                }
+            )
+
+        initial_backend = backend_options[0] if backend_options else None
+        for opt in backend_options:
+            if opt["value"] == current_backend:
+                initial_backend = opt
+                break
+
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "*Backend*"},
+                "accessory": {
+                    "type": "static_select",
+                    "action_id": "home_backend_select",
+                    "options": backend_options,
+                    "initial_option": initial_backend,
+                },
+            }
+        )
+
+        if current_backend == "opencode" and "opencode" in registered_backends:
+            current_oc_agent = (
+                current_routing.opencode_agent if current_routing else None
+            )
+            current_oc_model = (
+                current_routing.opencode_model if current_routing else None
+            )
+            current_oc_reasoning = (
+                current_routing.opencode_reasoning_effort if current_routing else None
+            )
+
+            blocks.append({"type": "divider"})
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "*OpenCode Options*"},
+                }
+            )
+
+            agent_options = [
+                {
+                    "text": {"type": "plain_text", "text": "(Default)"},
+                    "value": "__default__",
+                }
+            ]
+            for agent in opencode_agents:
+                agent_name = agent.get("name", "")
+                if agent_name:
+                    agent_options.append(
+                        {
+                            "text": {"type": "plain_text", "text": agent_name},
+                            "value": agent_name,
+                        }
+                    )
+
+            initial_agent = agent_options[0]
+            if current_oc_agent:
+                for opt in agent_options:
+                    if opt["value"] == current_oc_agent:
+                        initial_agent = opt
+                        break
+
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "Agent"},
+                    "accessory": {
+                        "type": "static_select",
+                        "action_id": "home_opencode_agent_select",
+                        "options": agent_options,
+                        "initial_option": initial_agent,
+                    },
+                }
+            )
+
+            model_options = [
+                {
+                    "text": {"type": "plain_text", "text": "(Default)"},
+                    "value": "__default__",
+                }
+            ]
+            providers_data = opencode_models.get("providers", [])
+            defaults = opencode_models.get("default", {})
+            for provider in providers_data:
+                provider_id = provider.get("id", "")
+                provider_name = provider.get("name", provider_id)
+                models = provider.get("models", {})
+                if isinstance(models, dict):
+                    for model_id, model_info in list(models.items())[:5]:
+                        if model_id:
+                            full_model = f"{provider_id}/{model_id}"
+                            model_name = (
+                                model_info.get("name", model_id)
+                                if isinstance(model_info, dict)
+                                else model_id
+                            )
+                            model_options.append(
+                                {
+                                    "text": {
+                                        "type": "plain_text",
+                                        "text": f"{provider_name}: {model_name}"[:75],
+                                    },
+                                    "value": full_model,
+                                }
+                            )
+
+            if len(model_options) > 100:
+                model_options = model_options[:100]
+
+            initial_model = model_options[0]
+            if current_oc_model:
+                for opt in model_options:
+                    if opt["value"] == current_oc_model:
+                        initial_model = opt
+                        break
+
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "Model"},
+                    "accessory": {
+                        "type": "static_select",
+                        "action_id": "home_opencode_model_select",
+                        "options": model_options,
+                        "initial_option": initial_model,
+                    },
+                }
+            )
+
+            reasoning_options = [
+                {
+                    "text": {"type": "plain_text", "text": "(Default)"},
+                    "value": "__default__",
+                },
+                {"text": {"type": "plain_text", "text": "Low"}, "value": "low"},
+                {"text": {"type": "plain_text", "text": "Medium"}, "value": "medium"},
+                {"text": {"type": "plain_text", "text": "High"}, "value": "high"},
+            ]
+
+            initial_reasoning = reasoning_options[0]
+            if current_oc_reasoning:
+                for opt in reasoning_options:
+                    if opt["value"] == current_oc_reasoning:
+                        initial_reasoning = opt
+                        break
+
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "Reasoning Effort"},
+                    "accessory": {
+                        "type": "static_select",
+                        "action_id": "home_opencode_reasoning_select",
+                        "options": reasoning_options,
+                        "initial_option": initial_reasoning,
+                    },
+                }
+            )
+
+            env_vars_str = ""
+            if current_env_vars:
+                env_vars_str = ", ".join(f"{k}" for k in current_env_vars.keys())
+            env_display = env_vars_str if env_vars_str else "None configured"
+
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*Environment Variables:* {env_display}",
+                    },
+                    "accessory": {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Edit", "emoji": True},
+                        "action_id": "home_edit_opencode_env",
+                    },
+                }
+            )
+
+        elif current_backend == "claude" and "claude" in registered_backends:
+            current_claude_mode = (
+                current_routing.claude_mode if current_routing else None
+            )
+            current_claude_model = (
+                current_routing.claude_model if current_routing else None
+            )
+            claude_env = current_routing.claude_env_vars if current_routing else None
+
+            blocks.append({"type": "divider"})
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "*Claude Code Options*"},
+                }
+            )
+
+            model_options = [
+                {"text": {"type": "plain_text", "text": "Opus 4.5"}, "value": "opus"},
+                {
+                    "text": {"type": "plain_text", "text": "Sonnet 4.5"},
+                    "value": "sonnet",
+                },
+                {
+                    "text": {"type": "plain_text", "text": "Sonnet 4.5 (1M context)"},
+                    "value": "sonnet-1m",
+                },
+                {"text": {"type": "plain_text", "text": "Haiku 4.5"}, "value": "haiku"},
+            ]
+
+            initial_model = model_options[1]
+            if current_claude_model:
+                for opt in model_options:
+                    if opt["value"] == current_claude_model:
+                        initial_model = opt
+                        break
+
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "Model"},
+                    "accessory": {
+                        "type": "static_select",
+                        "action_id": "home_claude_model_select",
+                        "options": model_options,
+                        "initial_option": initial_model,
+                    },
+                }
+            )
+
+            mode_options = [
+                {
+                    "text": {"type": "plain_text", "text": "(Default) - Normal"},
+                    "value": "__default__",
+                },
+                {"text": {"type": "plain_text", "text": "Plan Mode"}, "value": "plan"},
+            ]
+
+            initial_mode = mode_options[0]
+            if current_claude_mode == "plan":
+                initial_mode = mode_options[1]
+
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "Mode"},
+                    "accessory": {
+                        "type": "static_select",
+                        "action_id": "home_claude_mode_select",
+                        "options": mode_options,
+                        "initial_option": initial_mode,
+                    },
+                }
+            )
+
+            env_vars_str = ""
+            if claude_env:
+                env_vars_str = ", ".join(f"{k}" for k in claude_env.keys())
+            env_display = env_vars_str if env_vars_str else "None configured"
+
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*Environment Variables:* {env_display}",
+                    },
+                    "accessory": {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Edit", "emoji": True},
+                        "action_id": "home_edit_claude_env",
+                    },
+                }
+            )
+
+        blocks.append({"type": "divider"})
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "💡 Changes are saved automatically when you select an option.",
+                    }
+                ],
+            }
+        )
+
+        return {"type": "home", "blocks": blocks}
+
+    async def publish_app_home(
+        self,
+        user_id: str,
+        registered_backends: list,
+        current_backend: str,
+        opencode_agents: list,
+        opencode_models: dict,
+        opencode_default_config: dict,
+        current_routing,
+        global_require_mention: bool = False,
+        current_env_vars: Optional[Dict[str, str]] = None,
+        current_claude_env_vars: Optional[Dict[str, str]] = None,
+        status_info: Optional[Dict[str, Any]] = None,
+        channels: Optional[List[Dict[str, Any]]] = None,
+        selected_channel_id: Optional[str] = None,
+    ):
+        self._ensure_clients()
+
+        view = self._build_app_home_view(
+            user_id=user_id,
+            registered_backends=registered_backends,
+            current_backend=current_backend,
+            opencode_agents=opencode_agents,
+            opencode_models=opencode_models,
+            opencode_default_config=opencode_default_config,
+            current_routing=current_routing,
+            global_require_mention=global_require_mention,
+            current_env_vars=current_env_vars,
+            current_claude_env_vars=current_claude_env_vars,
+            status_info=status_info,
+            channels=channels,
+            selected_channel_id=selected_channel_id,
+        )
+
+        try:
+            await self.web_client.views_publish(user_id=user_id, view=view)
+            logger.info(f"Published App Home for user {user_id}")
+        except SlackApiError as e:
+            logger.error(f"Error publishing App Home: {e}")
+
+    async def open_env_vars_modal(
+        self,
+        trigger_id: str,
+        user_id: str,
+        env_type: str,
+        current_env_vars: Optional[Dict[str, str]] = None,
+    ):
+        self._ensure_clients()
+
+        env_vars_str = ""
+        if current_env_vars:
+            env_vars_str = "\n".join(f"{k}={v}" for k, v in current_env_vars.items())
+
+        title = "OpenCode Env Vars" if env_type == "opencode" else "Claude Env Vars"
+        callback_id = f"home_env_modal_{env_type}"
+
+        view = {
+            "type": "modal",
+            "callback_id": callback_id,
+            "private_metadata": user_id,
+            "title": {"type": "plain_text", "text": title[:24]},
+            "submit": {"type": "plain_text", "text": "Save"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "env_vars_block",
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "env_vars_input",
+                        "multiline": True,
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "KEY=value\nANOTHER_KEY=another_value",
+                        },
+                        "initial_value": env_vars_str,
+                    },
+                    "label": {
+                        "type": "plain_text",
+                        "text": "Environment Variables (KEY=VALUE, one per line)",
+                    },
+                    "optional": True,
+                },
+            ],
+        }
+
+        try:
+            await self.web_client.views_open(trigger_id=trigger_id, view=view)
+        except SlackApiError as e:
+            logger.error(f"Error opening env vars modal: {e}")
