@@ -18,11 +18,7 @@ from core.handlers import (
     MessageHandler,
 )
 from core.update_checker import UpdateChecker
-from core.gist_service import (
-    create_incremental_diff_gist,
-    create_full_diff_gist,
-    clear_diff_snapshot,
-)
+from core.gist_service import get_git_diff
 
 logger = logging.getLogger(__name__)
 
@@ -303,52 +299,15 @@ class Controller:
         keep = max(0, max_chars - len(prefix) - len(suffix))
         return f"{prefix}{text[:keep]}{suffix}"
 
-    async def _send_diff_gist_notification(
+    async def _send_diff_notification(
         self, context: MessageContext, target_context: MessageContext
     ):
         try:
             working_path = self.get_cwd(context)
-            session_key = f"{context.channel_id}:{context.thread_id}"
+            stat_output, _ = await get_git_diff(working_path)
 
-            gist_url, file_diffs, error = await create_incremental_diff_gist(
-                session_key, working_path
-            )
-
-            if error:
-                logger.debug(f"Gist creation skipped or failed: {error}")
+            if not stat_output:
                 return
-
-            if not gist_url or not file_diffs:
-                return
-
-            file_lines = []
-            total_insertions = 0
-            total_deletions = 0
-
-            for f in file_diffs[:5]:
-                if f.is_new:
-                    icon = "🆕"
-                elif f.is_deleted:
-                    icon = "🗑️"
-                else:
-                    icon = "📄"
-
-                stats = f"+{f.insertions}, -{f.deletions}"
-                file_lines.append(f"{icon} `{f.path}` ({stats})")
-                total_insertions += f.insertions
-                total_deletions += f.deletions
-
-            if len(file_diffs) > 5:
-                file_lines.append(f"_... 还有 {len(file_diffs) - 5} 个文件_")
-
-            files_text = "\n".join(file_lines)
-            stats_summary = f"+{total_insertions}, -{total_deletions}"
-
-            message = (
-                f"📝 *本轮对话修改了 {len(file_diffs)} 个文件* ({stats_summary})\n\n"
-                f"{files_text}\n\n"
-                f"🔗 <{gist_url}|查看本轮 Diff>"
-            )
 
             from modules.im import InlineKeyboard, InlineButton
 
@@ -356,19 +315,17 @@ class Controller:
                 [
                     [
                         InlineButton(
-                            "📊 查看全部变更", callback_data="view_all_changes"
+                            "📊 查看 Git 变更", callback_data="view_all_changes"
                         ),
                     ]
                 ]
             )
             await self.im_client.send_message_with_buttons(
-                target_context, message, keyboard
+                target_context, "📝 *有代码变更*", keyboard
             )
 
-            clear_diff_snapshot(session_key)
-
         except Exception as e:
-            logger.warning(f"Failed to send diff gist notification: {e}")
+            logger.warning(f"Failed to send diff notification: {e}")
 
     def _truncate_consolidated(self, text: str, max_bytes: int) -> str:
         """Truncate text to fit within max_bytes (UTF-8 encoded)."""
@@ -492,7 +449,7 @@ class Controller:
                             parse_mode=parse_mode,
                         )
 
-            await self._send_diff_gist_notification(context, target_context)
+            await self._send_diff_notification(context, target_context)
             return
 
         # Log Messages: system/assistant/toolcall - consolidated into editable message

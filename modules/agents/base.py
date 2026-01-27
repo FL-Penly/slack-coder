@@ -31,7 +31,6 @@ class AgentRequest:
     started_at: float = field(default_factory=time.monotonic)
     ack_reaction_message_id: Optional[str] = None
     ack_reaction_emoji: Optional[str] = None
-    diff_session_key: Optional[str] = None
 
 
 @dataclass
