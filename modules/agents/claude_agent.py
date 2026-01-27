@@ -25,13 +25,12 @@ class ClaudeAgent(BaseAgent):
         self.claude_client = controller.claude_client
         self._last_assistant_text: dict[str, str] = {}
         self._pending_assistant_message: dict[str, str] = {}
-        # Store reaction info per session as a queue (FIFO) for cleanup after result
-        # Each entry is (reaction_message_id, emoji)
         self._pending_reactions: dict[str, list[tuple[str, str]]] = {}
+        self._stop_button_messages: dict[str, str] = {}
 
     async def handle_message(self, request: AgentRequest) -> None:
         context = request.context
-        stop_button_message_id = None
+        composite_key = request.composite_session_id
 
         if hasattr(self.controller, "send_processing_message_with_stop_button"):
             stop_button_message_id = (
@@ -39,6 +38,8 @@ class ClaudeAgent(BaseAgent):
                     request.context, "⏳ Processing your request..."
                 )
             )
+            if stop_button_message_id:
+                self._stop_button_messages[composite_key] = stop_button_message_id
 
         try:
             routing = self.settings_manager.get_channel_routing(request.settings_key)
@@ -58,60 +59,37 @@ class ClaudeAgent(BaseAgent):
             )
 
             if request.ack_reaction_message_id and request.ack_reaction_emoji:
-                if request.composite_session_id not in self._pending_reactions:
-                    self._pending_reactions[request.composite_session_id] = []
-                self._pending_reactions[request.composite_session_id].append(
+                if composite_key not in self._pending_reactions:
+                    self._pending_reactions[composite_key] = []
+                self._pending_reactions[composite_key].append(
                     (request.ack_reaction_message_id, request.ack_reaction_emoji)
                 )
 
-            await client.query(request.message, session_id=request.composite_session_id)
-            logger.info(
-                f"Sent message to Claude for session {request.composite_session_id}"
-            )
+            await client.query(request.message, session_id=composite_key)
+            logger.info(f"Sent message to Claude for session {composite_key}")
 
             await self._delete_ack(context, request)
 
-            if stop_button_message_id and hasattr(
-                self.controller, "remove_stop_button"
-            ):
-                await self.controller.remove_stop_button(
-                    request.context, stop_button_message_id
-                )
-                stop_button_message_id = None
-
             if (
-                request.composite_session_id not in self.receiver_tasks
-                or self.receiver_tasks[request.composite_session_id].done()
+                composite_key not in self.receiver_tasks
+                or self.receiver_tasks[composite_key].done()
             ):
-                self.receiver_tasks[request.composite_session_id] = asyncio.create_task(
+                self.receiver_tasks[composite_key] = asyncio.create_task(
                     self._receive_messages(
                         client, request.base_session_id, request.working_path, context
                     )
                 )
         except asyncio.CancelledError:
-            if stop_button_message_id and hasattr(
-                self.controller, "remove_stop_button"
-            ):
-                await self.controller.remove_stop_button(
-                    request.context, stop_button_message_id
-                )
-            logger.info(f"Claude request cancelled for {request.composite_session_id}")
+            await self._remove_stop_button(composite_key, context)
+            logger.info(f"Claude request cancelled for {composite_key}")
             raise
         except Exception as e:
-            if stop_button_message_id and hasattr(
-                self.controller, "remove_stop_button"
-            ):
-                await self.controller.remove_stop_button(
-                    request.context, stop_button_message_id
-                )
+            await self._remove_stop_button(composite_key, context)
             logger.error(f"Error processing Claude message: {e}", exc_info=True)
-            # Clean up the specific reaction for this request (not FIFO)
             await self._remove_specific_pending_reaction(
-                request.composite_session_id, context, request
+                composite_key, context, request
             )
-            await self.session_handler.handle_session_error(
-                request.composite_session_id, context, e
-            )
+            await self.session_handler.handle_session_error(composite_key, context, e)
         finally:
             await self._delete_ack(context, request)
 
@@ -298,7 +276,7 @@ class ClaudeAgent(BaseAgent):
                             parse_mode="markdown",
                         )
 
-                        # Remove ack reaction after result is sent
+                        await self._remove_stop_button(composite_key, context)
                         await self._remove_pending_reaction(composite_key, context)
 
                         self._last_assistant_text.pop(composite_key, None)
@@ -324,13 +302,12 @@ class ClaudeAgent(BaseAgent):
                 f"Error in Claude receiver for session {composite_key}: {e}",
                 exc_info=True,
             )
-            # Clean up all pending reactions for this session on error
+            await self._remove_stop_button(composite_key, context)
             await self._clear_pending_reactions(composite_key, context)
             await self.session_handler.handle_session_error(composite_key, context, e)
         finally:
-            # Clean up any remaining reactions when receiver ends normally
-            # (e.g., client closed without sending a result)
             composite_key = f"{base_session_id}:{working_path}"
+            await self._remove_stop_button(composite_key, context)
             await self._clear_pending_reactions(composite_key, context)
 
     async def _delete_ack(self, context: MessageContext, request: AgentRequest):
@@ -405,10 +382,19 @@ class ClaudeAgent(BaseAgent):
                     logger.debug(f"Failed to remove reaction ack: {err}")
                 return
 
+    async def _remove_stop_button(
+        self, composite_key: str, context: MessageContext
+    ) -> None:
+        message_id = self._stop_button_messages.pop(composite_key, None)
+        if message_id and hasattr(self.controller, "remove_stop_button"):
+            try:
+                await self.controller.remove_stop_button(context, message_id)
+            except Exception as err:
+                logger.debug(f"Failed to remove stop button: {err}")
+
     async def _clear_pending_reactions(
         self, composite_key: str, context: MessageContext
     ) -> None:
-        """Clear all pending reactions for a session (for error cleanup)."""
         reactions = self._pending_reactions.pop(composite_key, None)
         if reactions:
             for message_id, emoji in reactions:

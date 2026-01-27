@@ -308,9 +308,7 @@ class Controller:
     ):
         try:
             working_path = self.get_cwd(context)
-            session_key = (
-                f"{context.channel_id}:{context.thread_id or context.message_id}"
-            )
+            session_key = f"{context.channel_id}:{context.thread_id}"
 
             gist_url, file_diffs, error = await create_incremental_diff_gist(
                 session_key, working_path

@@ -244,10 +244,10 @@ class MessageHandler:
                             f"Failed to remove reaction ack for subagent: {err}"
                         )
 
-            session_key = (
+            diff_session_key = (
                 f"{context.channel_id}:{context.thread_id or context.message_id}"
             )
-            await save_diff_snapshot(session_key, working_path)
+            await save_diff_snapshot(diff_session_key, working_path)
 
             request = AgentRequest(
                 context=context,
@@ -266,7 +266,7 @@ class MessageHandler:
                 if not subagent_name
                 else None,
                 ack_reaction_emoji=ack_reaction_emoji if not subagent_name else None,
-                diff_session_key=session_key,
+                diff_session_key=diff_session_key,
             )
             try:
                 await self.controller.agent_service.handle_message(agent_name, request)
