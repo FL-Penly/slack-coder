@@ -36,26 +36,32 @@ AI works. You live.
 
 ## Install
 
+### Option 1: Let AI Do It For You
+
+> **Just paste this URL to your AI assistant (Claude Code, Cursor, etc.):**
+>
+> ```
+> https://raw.githubusercontent.com/FL-Penly/slack-coder/master/docs/AI_SETUP.md
+> ```
+>
+> Your AI will read the instructions and set everything up. When done, run `vibe init` to complete configuration.
+
+### Option 2: Manual Install
+
 ```bash
-# Install with uv (recommended)
+# 1. Install with uv
 uv tool install git+https://github.com/FL-Penly/slack-coder.git
 
-# Or with pip
-pip install git+https://github.com/FL-Penly/slack-coder.git
+# 2. Run interactive setup
+vibe init
 ```
 
-Then configure your Slack app tokens:
+The setup wizard will guide you through:
+- Detecting/installing AI agents (Claude Code, OpenCode)
+- Creating a Slack App and getting tokens
+- Configuring your working directory
 
-```bash
-# Set environment variables
-export SLACK_BOT_TOKEN="xoxb-..."
-export SLACK_APP_TOKEN="xapp-..."
-
-# Start the bot
-vibe
-```
-
-See [Slack Setup Guide](docs/SLACK_SETUP.md) for detailed instructions on creating your Slack app.
+See [Slack Setup Guide](docs/SLACK_SETUP.md) for detailed manual instructions.
 
 ---
 
@@ -237,8 +243,9 @@ vibe stop && uv tool uninstall vibe && rm -rf ~/.vibe_remote
 
 ## Docs
 
+- **[AI Setup Guide](docs/AI_SETUP.md)** — Let your AI assistant install everything for you
 - **[CLI Reference](docs/CLI.md)** — Command-line usage and service lifecycle
-- **[Slack Setup Guide](docs/SLACK_SETUP.md)** — Detailed setup with screenshots
+- **[Slack Setup Guide](docs/SLACK_SETUP.md)** — Detailed manual setup with screenshots
 
 ---
 
