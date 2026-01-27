@@ -642,6 +642,8 @@ class SettingsManager:
         settings_key: str,
         working_path: str,
         baseline_message_ids: List[str],
+        ack_reaction_message_id: Optional[str] = None,
+        ack_reaction_emoji: Optional[str] = None,
     ) -> None:
         """Record an active poll for potential restoration on restart."""
         from config.v2_sessions import ActivePollInfo
@@ -657,6 +659,8 @@ class SettingsManager:
             seen_tool_calls=[],
             emitted_assistant_messages=[],
             started_at=time.time(),
+            ack_reaction_message_id=ack_reaction_message_id,
+            ack_reaction_emoji=ack_reaction_emoji,
         )
         self.sessions_store.add_active_poll(poll_info)
         logger.debug(

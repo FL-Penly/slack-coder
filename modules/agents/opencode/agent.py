@@ -106,6 +106,8 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                     open_modal_task = asyncio.create_task(
                         self._question_handler.open_question_modal(request, pending)  # type: ignore[arg-type]
                     )
+                    # Clean up reaction for modal open request
+                    await self._remove_ack_reaction(request)
                 else:
                     task = asyncio.create_task(self._process_message(request))
                     self._active_requests[request.base_session_id] = task
@@ -116,6 +118,8 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                     pending,
                     server,  # type: ignore[arg-type]
                 )
+                # Clean up reaction for answer submission
+                await self._remove_ack_reaction(request)
                 return
             else:
                 task = asyncio.create_task(self._process_message(request))
@@ -149,6 +153,7 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                 "notify",
                 f"Failed to start OpenCode server: {e}",
             )
+            await self._remove_ack_reaction(request)
             return
 
         await self._delete_ack(request)
@@ -163,6 +168,7 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                 "notify",
                 "Failed to obtain OpenCode session ID",
             )
+            await self._remove_ack_reaction(request)
             return
 
         self._session_manager.set_request_session(
@@ -268,6 +274,8 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                 settings_key=request.settings_key,
                 working_path=request.working_path,
                 baseline_message_ids=list(baseline_message_ids),
+                ack_reaction_message_id=request.ack_reaction_message_id,
+                ack_reaction_emoji=request.ack_reaction_emoji,
             )
 
             final_text, should_emit = await self._poll_loop.run_prompt_poll(
@@ -288,6 +296,8 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                 )
 
             if not should_emit:
+                # Clean up reaction even if we don't emit a result
+                await self._remove_ack_reaction(request)
                 return
 
             if final_text:
@@ -297,6 +307,7 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                     subtype="success",
                     started_at=request.started_at,
                     parse_mode="markdown",
+                    request=request,
                 )
             else:
                 await self.emit_result_message(
@@ -304,6 +315,7 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                     "(No response from OpenCode)",
                     subtype="warning",
                     started_at=request.started_at,
+                    request=request,
                 )
 
             await self._question_handler.clear(request.base_session_id)
@@ -318,6 +330,7 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                 )
             logger.info(f"OpenCode request cancelled for {request.base_session_id}")
             await self._question_handler.clear(request.base_session_id)
+            await self._remove_ack_reaction(request)
             if session_id:
                 self.settings_manager.remove_active_poll(session_id)
             raise
@@ -344,6 +357,7 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                 )
 
             await self._question_handler.clear(request.base_session_id)
+            await self._remove_ack_reaction(request)
             if session_id:
                 self.settings_manager.remove_active_poll(session_id)
 
@@ -414,6 +428,21 @@ class OpenCodeAgent(OpenCodeMessageProcessorMixin, BaseAgent):
                 logger.debug(f"Could not delete ack message: {err}")
             finally:
                 request.ack_message_id = None
+
+    async def _remove_ack_reaction(self, request: AgentRequest) -> None:
+        """Remove acknowledgement reaction on error paths."""
+        if request.ack_reaction_message_id and request.ack_reaction_emoji:
+            try:
+                await self.im_client.remove_reaction(
+                    request.context,
+                    request.ack_reaction_message_id,
+                    request.ack_reaction_emoji,
+                )
+            except Exception as err:
+                logger.debug(f"Could not remove ack reaction: {err}")
+            finally:
+                request.ack_reaction_message_id = None
+                request.ack_reaction_emoji = None
 
     async def restore_active_polls(self) -> int:
         """Restore active poll loops that were interrupted by vibe-remote restart."""
