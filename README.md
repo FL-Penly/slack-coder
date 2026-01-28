@@ -4,110 +4,37 @@
 
 # Slack Coder
 
-### Your AI coding army, commanded from Slack.
+### Control AI Coding Agents from Slack | 在 Slack 中控制 AI 编程助手
 
-**No laptop. No IDE. Just vibes.**
+**No laptop. No IDE. Just vibes.** | **无需电脑，无需 IDE，随时随地编程**
 
 [![GitHub Stars](https://img.shields.io/github/stars/FL-Penly/slack-coder?color=ffcb47&labelColor=black&style=flat-square)](https://github.com/FL-Penly/slack-coder/stargazers)
-[![Python](https://img.shields.io/badge/python-3.9%2B-3776AB?labelColor=black&style=flat-square)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?labelColor=black&style=flat-square)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green?labelColor=black&style=flat-square)](LICENSE)
-
-[English](README.md) | [中文](README_ZH.md)
-
----
-
-![Banner](assets/banner.jpg)
 
 </div>
 
-## The Pitch
-
-You're at the beach. Phone buzzes — production's on fire.
-
-**Old you:** Panic. Find WiFi. Open laptop. Wait for IDE. Lose your tan.
-
-**Slack Coder you:** Open Slack. Type "Fix the auth bug in login.py". Watch Claude Code fix it in real-time. Approve. Sip margarita.
-
-```
-AI works. You live.
-```
-
 ---
 
-## Install
+## For AI Assistants | 给 AI 助手
 
-### Option 1: Let AI Do It For You
-
-> **Just paste this URL to your AI assistant (Claude Code, Cursor, etc.):**
+> **If you are an AI assistant helping a user install Slack Coder, read this URL:**
 >
 > ```
 > https://raw.githubusercontent.com/FL-Penly/slack-coder/master/docs/AI_SETUP.md
 > ```
 >
-> Your AI will read the instructions and set everything up. When done, run `vibe init` to complete configuration.
+> It contains step-by-step instructions for you to execute.
 
-### Option 2: Manual Install
-
-```bash
-# 1. Install with uv
-uv tool install git+https://github.com/FL-Penly/slack-coder.git
-
-# 2. Run interactive setup
-vibe init
-```
-
-The setup wizard will guide you through:
-- Detecting/installing AI agents (Claude Code, OpenCode)
-- Creating a Slack App and getting tokens
-- Configuring your working directory
-
-See [Slack Setup Guide](docs/SLACK_SETUP.md) for detailed manual instructions.
+> **如果你是 AI 助手，正在帮用户安装 Slack Coder，请读取上面的 URL，里面有详细的安装步骤。**
 
 ---
 
-## Why This Exists
+## What is this? | 这是什么？
 
-| Problem | Solution |
-|---------|----------|
-| Claude Code is amazing but needs a terminal | Slack IS your terminal now |
-| Context-switching kills flow | Stay in one app |
-| Can't code from phone | Yes you can |
-| Multiple agents, multiple setups | One Slack, any agent |
+Slack Coder connects your Slack workspace to AI coding agents like **Claude Code** and **OpenCode**. Send a message in Slack, and the AI writes code on your machine.
 
-**Supported Agents:**
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — Deep reasoning, complex refactors
-- [OpenCode](https://opencode.ai) — Fast, extensible, community favorite  
-- [Codex](https://github.com/openai/codex) — OpenAI's coding model
-
----
-
-## Highlights
-
-### Thread = Session
-
-Each Slack thread is an isolated workspace. Open 5 threads, run 5 parallel tasks. Context stays separate.
-
-### Interactive Prompts
-
-When your agent needs input — file selection, confirmation, options — Slack pops up buttons or a modal. Full CLI interactivity, zero terminal required.
-
-![Interactive Prompts](assets/screenshots/question-en.jpg)
-
-### Instant Notifications
-
-Get notified the moment your AI finishes. Like assigning tasks to employees — delegate, go do something else, and come back when the work is done. No need to babysit.
-
-### Control Panel
-
-Open the control panel with `@bot /start` to access:
-- **Agent Settings** — Configure which agent to use per channel
-- **Working Directory** — Set the project path for your agent
-- **Session Management** — View and resume previous sessions
-- **Git Changes** — View uncommitted changes with rich diff display
-
----
-
-## How It Works
+Slack Coder 将你的 Slack 工作区连接到 AI 编程助手（如 **Claude Code** 和 **OpenCode**）。在 Slack 中发消息，AI 就会在你的电脑上写代码。
 
 ```
 ┌──────────────┐         ┌──────────────┐         ┌──────────────┐
@@ -116,115 +43,150 @@ Open the control panel with `@bot /start` to access:
 └──────────────┘         └──────────────┘         └──────────────┘
 ```
 
-1. **You type** in Slack: *"Add dark mode to the settings page"*
-2. **Slack Coder** routes to your configured agent
-3. **Agent** reads your codebase, writes code, streams back
-4. **You review** in Slack, iterate in thread
+**Your code never leaves your machine.** Slack Coder runs locally.
 
-**Your code never leaves your machine.** Slack Coder runs locally and connects via Slack's Socket Mode.
+**代码不会离开你的电脑。** Slack Coder 在本地运行。
 
 ---
 
-## Commands
+## Quick Start | 快速开始
 
-| In Slack | What it does |
-|----------|--------------|
+### Let AI Install It | 让 AI 帮你安装
+
+Just tell your AI assistant (Claude Code, Cursor, etc.):
+
+只需告诉你的 AI 助手（Claude Code、Cursor 等）：
+
+```
+Help me install Slack Coder. Read this guide:
+https://raw.githubusercontent.com/FL-Penly/slack-coder/master/docs/AI_SETUP.md
+```
+
+The AI will set up everything and guide you through Slack App creation.
+
+AI 会帮你安装所有依赖，并引导你创建 Slack App。
+
+### Manual Install | 手动安装
+
+```bash
+# Install | 安装
+uv tool install git+https://github.com/FL-Penly/slack-coder.git
+
+# Setup wizard | 配置向导
+vibe init
+
+# Start | 启动
+vibe
+```
+
+---
+
+## Features | 功能特点
+
+| Feature | Description |
+|---------|-------------|
+| **Thread = Session** | Each Slack thread is an isolated workspace. Run parallel tasks. |
+| **Interactive Prompts** | Agent needs input? Slack shows buttons/modals. No terminal needed. |
+| **Multi-Agent** | Switch between Claude Code, OpenCode, Codex per channel or message. |
+| **Git Diff Preview** | View uncommitted changes as GitHub Gist with syntax highlighting. |
+| **Session Resume** | Pick up where you left off. Sessions persist across restarts. |
+
+| 功能 | 描述 |
+|------|------|
+| **Thread = Session** | 每个 Slack 线程是独立的工作区，可并行执行多个任务 |
+| **交互式提示** | Agent 需要输入时，Slack 会弹出按钮/对话框，无需终端 |
+| **多 Agent 支持** | 按频道或消息切换 Claude Code、OpenCode、Codex |
+| **Git Diff 预览** | 以 GitHub Gist 形式查看未提交的代码变更 |
+| **会话恢复** | 支持恢复之前的会话，重启后继续工作 |
+
+---
+
+## Usage | 使用方法
+
+### In Slack | 在 Slack 中
+
+| Command | Description |
+|---------|-------------|
+| `@bot hello` | Start chatting with AI agent |
 | `@bot /start` | Open control panel |
-| `@bot /stop` | Kill current session |
+| `@bot /stop` | Stop current session |
 | `@bot /diff` | Show git changes |
-| `@bot /sessions` | View session history |
-| Just type | Talk to your agent |
-| Reply in thread | Continue conversation |
+| `claude: <message>` | Route to specific agent |
 
-**Pro tip:** Each Slack thread = isolated session. Start multiple threads for parallel tasks.
+| 命令 | 描述 |
+|------|------|
+| `@bot 你好` | 开始与 AI 对话 |
+| `@bot /start` | 打开控制面板 |
+| `@bot /stop` | 停止当前会话 |
+| `@bot /diff` | 显示 Git 变更 |
+| `claude: <消息>` | 指定使用某个 Agent |
 
----
-
-## Instant Agent Switching
-
-Need a different agent mid-conversation? Just prefix your message:
-
-```
-claude: Design a new caching layer for the API
-```
-
-That's it. No menus, no commands. Type `AgentName:` and your message routes to that agent instantly.
-
----
-
-## Per-Channel Routing
-
-Different projects, different agents:
-
-```
-#frontend    → OpenCode (fast iteration)
-#backend     → Claude Code (complex logic)  
-#prototypes  → Codex (quick experiments)
-```
-
-Configure via the **Agent Settings** button in the control panel (`@bot /start`).
-
----
-
-## CLI
+### CLI Commands | 命令行
 
 ```bash
-vibe          # Start the bot
-vibe status   # Check if running
-vibe stop     # Stop the bot
-vibe doctor   # Diagnose issues
+vibe          # Start service | 启动服务
+vibe status   # Check status | 查看状态
+vibe stop     # Stop service | 停止服务
+vibe doctor   # Diagnose issues | 诊断问题
+vibe init     # Re-run setup | 重新配置
 ```
 
 ---
 
-## Prerequisites
+## Supported Agents | 支持的 Agent
 
-You need at least one coding agent installed:
-
-<details>
-<summary><b>OpenCode</b> (Recommended)</summary>
-
-```bash
-curl -fsSL https://opencode.ai/install | bash
-```
-
-**Required:** Add to `~/.config/opencode/opencode.json` to skip permission prompts:
-
-```json
-{
-  "permission": "allow"
-}
-```
-</details>
-
-<details>
-<summary><b>Claude Code</b></summary>
-
-```bash
-npm install -g @anthropic-ai/claude-code
-```
-</details>
-
-<details>
-<summary><b>Codex</b></summary>
-
-```bash
-npm install -g @openai/codex
-```
-</details>
+| Agent | Install | Best For |
+|-------|---------|----------|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm i -g @anthropic-ai/claude-code` | Complex reasoning, refactoring |
+| [OpenCode](https://opencode.ai) | `curl -fsSL https://opencode.ai/install \| bash` | Fast iteration, extensible |
+| [Codex](https://github.com/openai/codex) | `npm i -g @openai/codex` | Quick experiments |
 
 ---
 
-## Security
+## Security | 安全性
 
-- **Local-first** — Slack Coder runs on your machine
-- **Socket Mode** — No public URLs, no webhooks
-- **Your tokens** — Stored in `~/.vibe_remote/`, never uploaded
-- **Your code** — Stays on your disk, sent only to your chosen AI provider
+- **Local-first** — Runs on your machine, not a server
+- **Socket Mode** — No public URLs, no webhooks exposed
+- **Your tokens** — Stored locally in `~/.vibe_remote/`
+- **Your code** — Never uploaded, only sent to your chosen AI provider
 
 ---
 
-## Uninstall
+- **本地优先** — 在你的电脑上运行，不是服务器
+- **Socket 模式** — 无需公开 URL，无需暴露 webhook
+- **你的令牌** — 存储在本地 `~/.vibe_remote/`
+- **你的代码** — 不会上传，只发送给你选择的 AI 提供商
+
+---
+
+## Troubleshooting | 故障排查
+
+```bash
+# Check logs | 查看日志
+cat ~/.vibe_remote/logs/vibe_remote.log | tail -50
+
+# Run diagnostics | 运行诊断
+vibe doctor
+
+# Restart | 重启
+vibe stop && vibe
+```
+
+| Problem | Solution |
+|---------|----------|
+| Bot not responding | Check `vibe status`, ensure bot is invited to channel |
+| Token error | Re-run `vibe init` to reconfigure |
+| Agent not found | Install Claude Code or OpenCode first |
+
+| 问题 | 解决方案 |
+|------|----------|
+| Bot 不响应 | 检查 `vibe status`，确保 bot 已被邀请到频道 |
+| Token 错误 | 重新运行 `vibe init` 配置 |
+| 找不到 Agent | 先安装 Claude Code 或 OpenCode |
+
+---
+
+## Uninstall | 卸载
 
 ```bash
 vibe stop && uv tool uninstall vibe && rm -rf ~/.vibe_remote
@@ -232,20 +194,21 @@ vibe stop && uv tool uninstall vibe && rm -rf ~/.vibe_remote
 
 ---
 
-## Roadmap
+## Docs | 文档
 
-- [ ] SaaS Mode
-- [ ] Custom Coding Agent (one agent to rule them all)
-- [ ] File attachments in Slack
-- [ ] Multi-workspace
+| Document | Description |
+|----------|-------------|
+| [AI Setup Guide](docs/AI_SETUP.md) | Instructions for AI assistants to install |
+| [Slack Setup Guide](docs/SLACK_SETUP.md) | Manual Slack App creation with screenshots |
+| [CLI Reference](docs/CLI.md) | Command-line usage |
 
 ---
 
-## Docs
+## Contributing | 贡献
 
-- **[AI Setup Guide](docs/AI_SETUP.md)** — Let your AI assistant install everything for you
-- **[CLI Reference](docs/CLI.md)** — Command-line usage and service lifecycle
-- **[Slack Setup Guide](docs/SLACK_SETUP.md)** — Detailed manual setup with screenshots
+PRs welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
+欢迎 PR！请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ---
 
@@ -253,10 +216,8 @@ vibe stop && uv tool uninstall vibe && rm -rf ~/.vibe_remote
 
 **Stop context-switching. Start vibe coding.**
 
-[Install Now](#install) · [Setup Guide](docs/SLACK_SETUP.md) · [Report Bug](https://github.com/FL-Penly/slack-coder/issues)
+**告别频繁切换，开始 vibe 编程。**
 
----
-
-*Built for developers who code from anywhere.*
+[GitHub](https://github.com/FL-Penly/slack-coder) · [Issues](https://github.com/FL-Penly/slack-coder/issues) · [Docs](docs/)
 
 </div>
