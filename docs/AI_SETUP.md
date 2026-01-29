@@ -10,14 +10,13 @@
 A local service that connects Slack to AI coding agents (Claude Code, OpenCode). Users can send coding tasks from Slack, and the AI agent executes them on their machine.
 
 **End Goal:**
-After completing this setup, the user runs `vibe init` and `vibe` to start the service, then uses `@Slack Coder` in Slack to interact with AI coding agents.
+After completing this setup, the user runs `vibe init` which handles Slack App creation, token configuration, and service startup interactively.
 
 **Your Role:**
 1. Install prerequisites (uv, Node.js if needed)
 2. Install Slack Coder via uv
 3. Install at least one AI agent (Claude Code or OpenCode)
-4. Guide user through Slack App creation (requires manual steps)
-5. Verify everything works
+4. **Tell user to run `vibe init`** - the wizard handles everything else
 
 ---
 
@@ -100,7 +99,10 @@ claude --version 2>/dev/null && echo "Claude Code: installed" || echo "Claude Co
 opencode --version 2>/dev/null && echo "OpenCode: installed" || echo "OpenCode: not installed"
 ```
 
-### **STOP HERE** - Ask the user:
+### If BOTH are already installed:
+Skip to Step 4.
+
+### If NEITHER is installed - Ask the user:
 
 > "Which AI agent would you like to use?
 > 1. **Claude Code** - Best for complex reasoning and refactoring (requires Anthropic API key)
@@ -137,149 +139,41 @@ curl -fsSL https://opencode.ai/install | bash
 opencode --version
 ```
 
-**Configure auto-approve (required for non-interactive use):**
-```bash
-mkdir -p ~/.config/opencode
-cat > ~/.config/opencode/opencode.json << 'EOF'
-{
-  "permission": "allow"
-}
-EOF
-```
-
 ---
 
-## STEP 4: Create Slack App
+## STEP 4: Run Setup Wizard
 
-### **STOP HERE** - This requires user action in browser.
+**IMPORTANT: This is where you STOP and let the user take over.**
 
 Tell the user:
 
-> "Now we need to create a Slack App. This requires a few manual steps in your browser.
+> "All prerequisites are installed! Now run the setup wizard:
 >
-> **Please do the following:**
+> ```bash
+> vibe init
+> ```
 >
-> 1. Open this URL: https://api.slack.com/apps
-> 2. Click **'Create New App'**
-> 3. Choose **'From a manifest'**
-> 4. Select your workspace
-> 5. Choose **YAML** format
-> 6. Paste the manifest below and click **Create**"
+> The wizard will:
+> 1. Detect your installed AI agents
+> 2. Open your browser to create a Slack App (with pre-filled settings)
+> 3. Guide you to get the required tokens
+> 4. Validate everything and start the service
+>
+> **Please run `vibe init` now and follow the prompts.**"
+
+### **STOP HERE** - Wait for user to complete `vibe init`
+
+The `vibe init` wizard is interactive and handles:
+- Slack App creation (opens browser with pre-filled manifest)
+- Token input and validation
+- Working directory setup
+- Service startup
 
 ---
 
-### Slack App Manifest (YAML)
+## STEP 5: Verify Setup
 
-```yaml
-display_information:
-  name: Slack Coder
-  description: AI coding agent runtime for Slack
-  background_color: "#262626"
-features:
-  bot_user:
-    display_name: Slack Coder
-    always_online: true
-  app_home:
-    home_tab_enabled: true
-    messages_tab_enabled: true
-    messages_tab_read_only_enabled: false
-oauth_config:
-  scopes:
-    bot:
-      - channels:history
-      - channels:read
-      - chat:write
-      - app_mentions:read
-      - users:read
-      - commands
-      - groups:read
-      - groups:history
-      - im:history
-      - im:read
-      - im:write
-      - mpim:history
-      - mpim:read
-      - mpim:write
-      - files:read
-      - files:write
-      - reactions:read
-      - reactions:write
-settings:
-  event_subscriptions:
-    bot_events:
-      - message.channels
-      - message.groups
-      - message.im
-      - message.mpim
-      - app_mention
-      - app_home_opened
-      - reaction_added
-      - reaction_removed
-  interactivity:
-    is_enabled: true
-  org_deploy_enabled: true
-  socket_mode_enabled: true
-  token_rotation_enabled: false
-```
-
----
-
-### Get Tokens
-
-After creating the app, guide the user:
-
-> "Great! Now we need two tokens:
->
-> **Token 1 - Bot Token:**
-> 1. In your Slack App settings, go to **'OAuth & Permissions'** in the left sidebar
-> 2. Click **'Install to Workspace'** and authorize
-> 3. Copy the **'Bot User OAuth Token'** (starts with `xoxb-`)
->
-> **Token 2 - App Token:**
-> 1. Go to **'Basic Information'** in the left sidebar
-> 2. Scroll down to **'App-Level Tokens'**
-> 3. Click **'Generate Token and Scopes'**
-> 4. Name it `socket`
-> 5. Add scope: `connections:write`
-> 6. Click **Generate**
-> 7. Copy the token (starts with `xapp-`)
->
-> Please provide both tokens."
-
-### **STOP HERE** - Wait for user to provide:
-1. Bot Token (xoxb-...)
-2. App Token (xapp-...)
-
----
-
-## STEP 5: Run Interactive Setup
-
-Now that prerequisites are installed, run the interactive setup wizard:
-
-```bash
-vibe init
-```
-
-This will:
-1. Detect installed AI agents
-2. Prompt for Slack tokens (user provides the tokens from Step 4)
-3. Set working directory
-4. Save configuration
-5. Optionally start the service
-
-**Tell the user:**
-> "Run `vibe init` now. It will ask for:
-> - Language preference (Chinese/English)
-> - The Slack tokens you just copied
-> - Your project's working directory (where AI will read/write code)
->
-> After completing the wizard, the service will start automatically."
-
----
-
-## STEP 6: Verify Setup
-
-After `vibe init` completes:
+After user completes `vibe init`, verify:
 
 ```bash
 # Check service status
@@ -291,17 +185,17 @@ vibe doctor
 
 **Expected output for `vibe status`:**
 ```
-Service is running (PID: xxxxx)
+Slack Coder is already running (PID: xxxxx)
 ```
 
-**If not running, start manually:**
+**If not running:**
 ```bash
 vibe
 ```
 
 ---
 
-## STEP 7: Test in Slack
+## STEP 6: Test in Slack
 
 Guide the user:
 
@@ -347,7 +241,7 @@ source ~/.zshrc
 - Verify Bot Token starts with `xoxb-`
 - Verify App Token starts with `xapp-`
 - Ensure App Token has `connections:write` scope
-- Try reinstalling the Slack App to workspace
+- Re-run `vibe init` to reconfigure
 
 ### Agent not responding
 
@@ -399,13 +293,11 @@ Setup is complete when:
 1. Check/install uv → `uv --version`
 2. Install slack-coder → `uv tool install git+https://github.com/FL-Penly/slack-coder.git`
 3. Check/install AI agent → Claude Code or OpenCode
-4. **STOP** → Guide user through Slack App creation (browser required)
-5. **STOP** → Get tokens from user
-6. Run `vibe init` → User completes interactive wizard
-7. Verify → `vibe status`, `vibe doctor`
-8. Test → User sends message in Slack
+4. **STOP** → Tell user to run `vibe init` (handles Slack App creation, tokens, everything)
+5. Verify → `vibe status`, `vibe doctor`
+6. Test → User sends message in Slack
 
 **Key Points:**
-- Steps 4-5 require user interaction (browser + copy tokens)
-- Step 6 (`vibe init`) is interactive - user runs it themselves
-- You prepare the environment; user completes the wizard
+- `vibe init` is the interactive wizard that handles ALL configuration
+- Do NOT manually guide Slack App creation - `vibe init` does this better (opens browser with pre-filled manifest)
+- Your job is to prepare the environment; `vibe init` handles the rest
