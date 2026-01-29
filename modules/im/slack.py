@@ -1698,6 +1698,195 @@ class SlackBot(BaseIMClient):
             logger.error(f"Error opening change CWD modal: {e}")
             raise
 
+    async def open_sessions_modal_loading(
+        self,
+        trigger_id: str,
+        working_path: str,
+        channel_id: str = None,
+        agent_name: str = "opencode",
+    ) -> Optional[Dict[str, str]]:
+        self._ensure_clients()
+        import json
+
+        agent_label = "Claude Code" if agent_name == "claude" else "OpenCode"
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"📁 {t('modal.directory', path=working_path)}\n🤖 {t('modal.agent_label', agent=agent_label)}",
+                },
+            },
+            {"type": "divider"},
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"⏳ {t('common.loading')}..."},
+            },
+        ]
+
+        metadata = json.dumps(
+            {"channel_id": channel_id or "", "agent_name": agent_name}
+        )
+        view = {
+            "type": "modal",
+            "callback_id": "sessions_modal",
+            "private_metadata": metadata,
+            "title": {"type": "plain_text", "text": t("modal.sessions_title")},
+            "close": {"type": "plain_text", "text": t("buttons.close")},
+            "blocks": blocks,
+        }
+
+        try:
+            response = await self.web_client.views_open(
+                trigger_id=trigger_id, view=view
+            )
+            if response.get("ok"):
+                view_data = response.get("view", {})
+                return {
+                    "view_id": view_data.get("id"),
+                    "view_hash": view_data.get("hash"),
+                }
+            return None
+        except SlackApiError as e:
+            logger.error(f"Error opening loading modal: {e}")
+            return None
+
+    async def update_sessions_modal(
+        self,
+        view_id: str,
+        view_hash: str,
+        sessions: list,
+        working_path: str,
+        channel_id: str = None,
+        agent_name: str = "opencode",
+    ):
+        self._ensure_clients()
+        import json
+        from datetime import datetime
+
+        agent_label = "Claude Code" if agent_name == "claude" else "OpenCode"
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"📁 {t('modal.directory', path=working_path)}\n🤖 {t('modal.agent_label', agent=agent_label)}",
+                },
+            },
+            {"type": "divider"},
+        ]
+
+        if not sessions:
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"📋 {t('modal.no_sessions')}\n\n💡 {t('modal.send_message_hint')}",
+                    },
+                }
+            )
+        else:
+            options = []
+            for session in sessions[:20]:
+                session_id = session.get("id", "unknown")
+                title = session.get("title", "")
+
+                time_str = ""
+                time_info = session.get("time", {})
+                updated_ts = time_info.get("updated", 0) or time_info.get("created", 0)
+                if updated_ts:
+                    time_str = datetime.fromtimestamp(updated_ts / 1000).strftime(
+                        "%m-%d %H:%M"
+                    )
+                else:
+                    modified_iso = session.get("modified", "") or session.get(
+                        "created", ""
+                    )
+                    if modified_iso:
+                        try:
+                            dt = datetime.fromisoformat(
+                                modified_iso.replace("Z", "+00:00")
+                            )
+                            time_str = dt.strftime("%m-%d %H:%M")
+                        except (ValueError, TypeError):
+                            pass
+
+                if title.startswith("vibe-remote:"):
+                    title = ""
+
+                display_text = (
+                    f"{time_str} {title}" if title else f"{time_str} {session_id[:16]}"
+                )
+                display_text = display_text.strip()[:70]
+
+                options.append(
+                    {
+                        "text": {
+                            "type": "plain_text",
+                            "text": display_text or session_id[:20],
+                        },
+                        "value": session_id,
+                    }
+                )
+
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"📋 {t('session.sessions_found', count=len(sessions))} {t('session.select_to_resume')}",
+                    },
+                }
+            )
+            blocks.append(
+                {
+                    "type": "actions",
+                    "block_id": "session_select_block",
+                    "elements": [
+                        {
+                            "type": "static_select",
+                            "action_id": "session_select",
+                            "placeholder": {
+                                "type": "plain_text",
+                                "text": t("session.select_session"),
+                            },
+                            "options": options,
+                        }
+                    ],
+                }
+            )
+            blocks.append(
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": f"💡 {t('modal.continue_in_thread')}",
+                        }
+                    ],
+                }
+            )
+
+        metadata = json.dumps(
+            {"channel_id": channel_id or "", "agent_name": agent_name}
+        )
+        view = {
+            "type": "modal",
+            "callback_id": "sessions_modal",
+            "private_metadata": metadata,
+            "title": {"type": "plain_text", "text": t("modal.sessions_title")},
+            "close": {"type": "plain_text", "text": t("buttons.close")},
+            "blocks": blocks,
+        }
+
+        try:
+            await self.web_client.views_update(
+                view_id=view_id, hash=view_hash, view=view
+            )
+        except SlackApiError as e:
+            logger.error(f"Error updating sessions modal: {e}")
+
     async def open_sessions_modal(
         self,
         trigger_id: str,

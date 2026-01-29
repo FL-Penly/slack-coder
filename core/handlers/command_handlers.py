@@ -522,28 +522,59 @@ class CommandHandlers:
 
             working_path = self.controller.get_cwd(context)
             agent_name = self.controller.resolve_agent_for_context(context)
-            sessions = []
 
-            if agent_name == "claude":
-                from modules.claude_client import ClaudeClient
-
-                sessions = ClaudeClient.list_sessions(working_path)
-            elif agent_name == "opencode":
-                opencode_agent = self.controller.agent_service.agents.get("opencode")
-                if opencode_agent:
-                    server = await opencode_agent._get_server()
-                    await server.ensure_running()
-                    sessions = await server.list_sessions(working_path)
-
-            if not sessions:
-                channel_context = self._get_channel_context(context)
-                await self.im_client.send_message(
-                    channel_context,
-                    f"📭 {t('session.no_sessions_found', agent=agent_name)}",
+            if hasattr(self.im_client, "open_sessions_modal_loading"):
+                view_info = await self.im_client.open_sessions_modal_loading(
+                    trigger_id, working_path, context.channel_id, agent_name
                 )
-                return
+                if not view_info:
+                    return
 
-            if hasattr(self.im_client, "open_sessions_modal"):
+                sessions = []
+                if agent_name == "claude":
+                    from modules.claude_client import ClaudeClient
+
+                    sessions = ClaudeClient.list_sessions(working_path)
+                elif agent_name == "opencode":
+                    opencode_agent = self.controller.agent_service.agents.get(
+                        "opencode"
+                    )
+                    if opencode_agent:
+                        server = await opencode_agent._get_server()
+                        await server.ensure_running()
+                        sessions = await server.list_sessions(working_path)
+
+                await self.im_client.update_sessions_modal(
+                    view_info["view_id"],
+                    view_info["view_hash"],
+                    sessions,
+                    working_path,
+                    context.channel_id,
+                    agent_name,
+                )
+            elif hasattr(self.im_client, "open_sessions_modal"):
+                sessions = []
+                if agent_name == "claude":
+                    from modules.claude_client import ClaudeClient
+
+                    sessions = ClaudeClient.list_sessions(working_path)
+                elif agent_name == "opencode":
+                    opencode_agent = self.controller.agent_service.agents.get(
+                        "opencode"
+                    )
+                    if opencode_agent:
+                        server = await opencode_agent._get_server()
+                        await server.ensure_running()
+                        sessions = await server.list_sessions(working_path)
+
+                if not sessions:
+                    channel_context = self._get_channel_context(context)
+                    await self.im_client.send_message(
+                        channel_context,
+                        f"📭 {t('session.no_sessions_found', agent=agent_name)}",
+                    )
+                    return
+
                 await self.im_client.open_sessions_modal(
                     trigger_id, sessions, working_path, context.channel_id, agent_name
                 )
