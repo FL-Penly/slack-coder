@@ -239,14 +239,14 @@ class SettingsHandler:
 
             # Use format_info_message for clean, platform-agnostic formatting
             info_text = formatter.format_info_message(
-                title="How Vibe Remote Works:",
+                title="How Slack Coder Works:",
                 emoji="📚",
                 items=[
                     ("Real-time", f"Messages are immediately sent to {agent_label}"),
                     ("Persistent", "Each chat maintains its own conversation context"),
                     (
                         "Commands",
-                        "Use @Vibe Remote /start for menu, @Vibe Remote /clear to reset session",
+                        "Use @Slack Coder /start for menu, @Slack Coder /clear to reset session",
                     ),
                     ("Work Dir", "Change working directory with /set_cwd or via menu"),
                     ("Settings", "Customize message visibility in Settings"),

@@ -12,6 +12,7 @@ from markdown_to_mrkdwn import SlackMarkdownConverter
 
 from .base import BaseIMClient, MessageContext, InlineKeyboard, InlineButton
 from config.v2_config import SlackConfig
+from modules.i18n import t
 from .formatters import SlackFormatter
 from core.diff_parser import (
     parse_unified_diff,
@@ -325,14 +326,17 @@ class SlackBot(BaseIMClient):
             for row_idx, row in enumerate(keyboard.buttons):
                 elements = []
                 for button in row:
-                    elements.append(
-                        {
-                            "type": "button",
-                            "text": {"type": "plain_text", "text": button.text},
-                            "action_id": button.callback_data,
-                            "value": button.callback_data,
-                        }
-                    )
+                    btn = {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": button.text},
+                    }
+                    if button.url:
+                        btn["url"] = button.url
+                        btn["action_id"] = f"link_{row_idx}_{len(elements)}"
+                    else:
+                        btn["action_id"] = button.callback_data
+                        btn["value"] = button.callback_data
+                    elements.append(btn)
 
                 blocks.append(
                     {
@@ -408,14 +412,17 @@ class SlackBot(BaseIMClient):
                 for row_idx, row in enumerate(keyboard.buttons):
                     elements = []
                     for button in row:
-                        elements.append(
-                            {
-                                "type": "button",
-                                "text": {"type": "plain_text", "text": button.text},
-                                "action_id": button.callback_data,
-                                "value": button.callback_data,
-                            }
-                        )
+                        btn = {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": button.text},
+                        }
+                        if button.url:
+                            btn["url"] = button.url
+                            btn["action_id"] = f"link_{row_idx}_{len(elements)}"
+                        else:
+                            btn["action_id"] = button.callback_data
+                            btn["value"] = button.callback_data
+                        elements.append(btn)
 
                     blocks.append(
                         {
@@ -924,7 +931,7 @@ class SlackBot(BaseIMClient):
                 try:
                     await self.web_client.chat_postMessage(
                         channel=user_id,
-                        text=f"❌ 操作失败: {str(e)[:100]}",
+                        text=t("errors.failed_operation", error=str(e)[:100]),
                     )
                 except Exception:
                     pass
@@ -1225,14 +1232,14 @@ class SlackBot(BaseIMClient):
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": "*Select a command:*",
+                    "text": f"*{t('modal.select_command')}*",
                 },
                 "accessory": {
                     "type": "external_select",
                     "action_id": "slash_command_select",
                     "placeholder": {
                         "type": "plain_text",
-                        "text": "Type to search commands...",
+                        "text": t("modal.type_to_search"),
                     },
                     "min_query_length": 0,
                 },
@@ -1709,7 +1716,7 @@ class SlackBot(BaseIMClient):
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"📁 目录：`{working_path}`\n🤖 Agent：{agent_label}",
+                    "text": f"📁 {t('modal.directory', path=working_path)}\n🤖 {t('modal.agent_label', agent=agent_label)}",
                 },
             },
             {"type": "divider"},
@@ -1721,7 +1728,7 @@ class SlackBot(BaseIMClient):
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": "📋 没有找到会话\n\n💡 发送消息开始新对话",
+                        "text": f"📋 {t('modal.no_sessions')}\n\n💡 {t('modal.send_message_hint')}",
                     },
                 }
             )
@@ -1774,7 +1781,7 @@ class SlackBot(BaseIMClient):
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"📋 找到 {len(sessions)} 个会话，选择要恢复的：",
+                        "text": f"📋 {t('session.sessions_found', count=len(sessions))} {t('session.select_to_resume')}",
                     },
                 }
             )
@@ -1788,7 +1795,7 @@ class SlackBot(BaseIMClient):
                             "action_id": "session_select",
                             "placeholder": {
                                 "type": "plain_text",
-                                "text": "选择会话...",
+                                "text": t("session.select_session"),
                             },
                             "options": options,
                         }
@@ -1799,7 +1806,10 @@ class SlackBot(BaseIMClient):
                 {
                     "type": "context",
                     "elements": [
-                        {"type": "mrkdwn", "text": "💡 选择后在线程中输入消息继续对话"}
+                        {
+                            "type": "mrkdwn",
+                            "text": f"💡 {t('modal.continue_in_thread')}",
+                        }
                     ],
                 }
             )
@@ -1811,8 +1821,8 @@ class SlackBot(BaseIMClient):
             "type": "modal",
             "callback_id": "sessions_modal",
             "private_metadata": metadata,
-            "title": {"type": "plain_text", "text": "恢复会话"},
-            "close": {"type": "plain_text", "text": "关闭"},
+            "title": {"type": "plain_text", "text": t("modal.sessions_title")},
+            "close": {"type": "plain_text", "text": t("buttons.close")},
             "blocks": blocks,
         }
 
@@ -1835,7 +1845,10 @@ class SlackBot(BaseIMClient):
         blocks = [
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"📁 目录：`{working_path}`"},
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"📁 {t('modal.directory', path=working_path)}",
+                },
             },
             {"type": "divider"},
         ]
@@ -1844,7 +1857,7 @@ class SlackBot(BaseIMClient):
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": "✅ 没有未提交的更改"},
+                    "text": {"type": "mrkdwn", "text": f"✅ {t('diff.no_changes')}"},
                 }
             )
         else:
@@ -1872,8 +1885,8 @@ class SlackBot(BaseIMClient):
             "type": "modal",
             "callback_id": "diff_modal",
             "private_metadata": channel_id or "",
-            "title": {"type": "plain_text", "text": "Git 变更"},
-            "close": {"type": "plain_text", "text": "关闭"},
+            "title": {"type": "plain_text", "text": t("modal.diff_title")},
+            "close": {"type": "plain_text", "text": t("buttons.close")},
             "blocks": blocks,
         }
 

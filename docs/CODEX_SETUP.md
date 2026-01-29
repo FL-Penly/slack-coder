@@ -1,6 +1,6 @@
 # Codex Agent Setup
 
-Vibe Remote can route individual Slack channels to Codex instead of Claude Code. (OpenCode is also supported and recommended; see README for quick enablement.) This guide walks through enabling Codex end-to-end.
+Slack Coder can route individual Slack channels to Codex instead of Claude Code. (OpenCode is also supported and recommended; see README for quick enablement.) This guide walks through enabling Codex end-to-end.
 
 ## 1. Install and authenticate Codex CLI
 
@@ -10,7 +10,7 @@ codex --help           # verify installation
 codex                  # sign in when prompted
 ```
 
-Codex CLI must be available on the PATH of the host running Vibe Remote. The bot automatically runs Codex with `--json` and `--dangerously-bypass-approvals-and-sandbox`, so make sure you trust the workspace it operates in.
+Codex CLI must be available on the PATH of the host running Slack Coder. The bot automatically runs Codex with `--json` and `--dangerously-bypass-approvals-and-sandbox`, so make sure you trust the workspace it operates in.
 
 ## 2. Configure environment variables
 
@@ -42,7 +42,7 @@ Each Slack channel ID (starts with `C`) gets its own agent. Routes fall back to 
 vibe
 ```
 
-In a routed Slack channel run `@VibeRemote status` or any question—you should see the bot react with 👀 (default) or an acknowledgement like `📨 Codex received, processing...` (when `ACK_MODE=message`), followed by Codex’s reply. If the CLI is missing, the bot will reply with “Agent `codex` is not configured”.
+In a routed Slack channel run `@Slack Coder status` or any question—you should see the bot react with 👀 (default) or an acknowledgement like `📨 Codex received, processing...` (when `ACK_MODE=message`), followed by Codex’s reply. If the CLI is missing, the bot will reply with “Agent `codex` is not configured”.
 
 ## 5. Troubleshooting
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Vibe Remote Installation Script
-# Usage: curl -fsSL https://raw.githubusercontent.com/cyhhao/vibe-remote/master/install.sh | bash
+# Slack Coder Installation Script
+# Usage: curl -fsSL https://raw.githubusercontent.com/FL-Penly/slack-coder/master/install.sh | bash
 #
 # Prerequisites: None! uv will be installed automatically and manages Python for you.
 
@@ -14,8 +14,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-REPO="cyhhao/vibe-remote"
-PACKAGE_NAME="vibe-remote"
+REPO="FL-Penly/slack-coder"
+PACKAGE_NAME="slack-coder"
 
 print_banner() {
     echo -e "${BLUE}"
@@ -106,22 +106,22 @@ install_uv() {
     fi
 }
 
-# Install vibe-remote using uv (uv auto-downloads Python if needed)
+# Install slack-coder using uv (uv auto-downloads Python if needed)
 install_vibe() {
-    info "Installing vibe-remote (Python will be downloaded automatically if needed)..."
+    info "Installing slack-coder (Python will be downloaded automatically if needed)..."
     
     # uv tool install will auto-download Python if not available
     # --force: reinstall even if already installed
     # --refresh: refresh package cache to get latest version
     # Try in order: PyPI -> China mirror (tsinghua) -> GitHub
     if uv tool install "$PACKAGE_NAME" --force --refresh 2>/dev/null; then
-        success "vibe-remote installed successfully (from PyPI)"
+        success "slack-coder installed successfully (from PyPI)"
     elif uv tool install "$PACKAGE_NAME" --force --refresh --index-url https://pypi.tuna.tsinghua.edu.cn/simple 2>/dev/null; then
-        success "vibe-remote installed successfully (from Tsinghua mirror)"
+        success "slack-coder installed successfully (from Tsinghua mirror)"
     elif uv tool install "git+https://github.com/${REPO}.git" --force 2>/dev/null; then
-        success "vibe-remote installed successfully (from GitHub)"
+        success "slack-coder installed successfully (from GitHub)"
     else
-        error "Failed to install vibe-remote from all sources"
+        error "Failed to install slack-coder from all sources"
     fi
 }
 
@@ -132,22 +132,22 @@ verify_installation() {
     # Refresh PATH
     export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
     
-    if command_exists vibe; then
-        success "vibe command is available"
+    if command_exists slack-coder; then
+        success "slack-coder command is available"
         echo ""
-        vibe --help 2>/dev/null || true
+        slack-coder --help 2>/dev/null || true
         return 0
     fi
     
     # Check common install locations
-    local vibe_locations=(
-        "$HOME/.local/bin/vibe"
-        "$HOME/.cargo/bin/vibe"
+    local slack_coder_locations=(
+        "$HOME/.local/bin/slack-coder"
+        "$HOME/.cargo/bin/slack-coder"
     )
     
-    for loc in "${vibe_locations[@]}"; do
+    for loc in "${slack_coder_locations[@]}"; do
         if [ -f "$loc" ]; then
-            warn "vibe installed at $loc but not in PATH"
+            warn "slack-coder installed at $loc but not in PATH"
             echo ""
             echo -e "${YELLOW}Add this to your shell config (.bashrc, .zshrc, etc.):${NC}"
             echo -e "  export PATH=\"$(dirname "$loc"):\$PATH\""
@@ -156,7 +156,7 @@ verify_installation() {
         fi
     done
     
-    error "Installation verification failed. vibe command not found."
+    error "Installation verification failed. slack-coder command not found."
 }
 
 # Print next steps
@@ -170,15 +170,15 @@ print_next_steps() {
     echo "  3. Enable channels and start chatting with AI agents"
     echo ""
     echo -e "${BLUE}Quick commands:${NC}"
-    echo "  vibe          - Start Vibe Remote (service + web UI)"
-    echo "  vibe status   - Check service status"
-    echo "  vibe stop     - Stop all services"
-    echo "  vibe doctor   - Run diagnostics"
+    echo "  slack-coder          - Start Slack Coder (service + web UI)"
+    echo "  slack-coder status   - Check service status"
+    echo "  slack-coder stop     - Stop all services"
+    echo "  slack-coder doctor   - Run diagnostics"
     echo ""
     echo -e "${BLUE}Uninstall:${NC}"
-    echo "  uv tool uninstall vibe-remote    # if installed with uv"
-    echo "  pip uninstall vibe-remote        # if installed with pip"
-    echo "  rm -rf ~/.vibe_remote            # remove config and data"
+    echo "  uv tool uninstall slack-coder    # if installed with uv"
+    echo "  pip uninstall slack-coder        # if installed with pip"
+    echo "  rm -rf ~/.slack_coder            # remove config and data"
     echo ""
     echo -e "${BLUE}Documentation:${NC}"
     echo "  https://github.com/${REPO}#readme"
@@ -196,7 +196,7 @@ main() {
     # Install uv (which manages Python automatically)
     install_uv
     
-    # Install vibe-remote
+    # Install slack-coder
     install_vibe
     
     # Verify

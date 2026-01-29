@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from modules.i18n import t
+
 
 @dataclass
 class DiffHunk:
@@ -147,7 +149,7 @@ def format_diff_for_slack(
 ) -> str:
     """Format parsed diff into Slack-friendly up-down comparison format."""
     if not files:
-        return "✅ 没有检测到代码变更"
+        return t("diff.no_changes")
 
     output_parts = []
     files_shown = 0
@@ -161,18 +163,18 @@ def format_diff_for_slack(
         files_shown += 1
 
         if file_diff.is_new_file:
-            icon, status = "🆕", "(新文件)"
+            icon, status = "🆕", t("diff.new_file")
         elif file_diff.is_deleted_file:
-            icon, status = "🗑️", "(已删除)"
+            icon, status = "🗑️", t("diff.deleted_file")
         elif file_diff.is_binary:
-            icon, status = "📦", "(二进制文件)"
+            icon, status = "📦", t("diff.binary_file")
         else:
             icon, status = "📄", ""
 
         output_parts.append(f"\n{icon} *{file_diff.new_path}* {status}")
 
         if file_diff.is_binary:
-            output_parts.append("  _二进制文件已更改_")
+            output_parts.append(f"  _{t('diff.binary_changed')}_")
             continue
 
         changes_shown = 0
@@ -230,7 +232,7 @@ def format_diff_for_slack(
 def format_diff_summary(files: List[FileDiff]) -> str:
     """Generate a brief summary like '3 files changed, 10 insertions(+), 5 deletions(-)'."""
     if not files:
-        return "没有变更"
+        return t("diff.no_changes")
 
     total_insertions = 0
     total_deletions = 0
@@ -243,13 +245,13 @@ def format_diff_summary(files: List[FileDiff]) -> str:
                 elif change_type == "-":
                     total_deletions += 1
 
-    parts = [f"{len(files)} 个文件变更"]
+    parts = [t("diff.files_changed", count=len(files))]
     if total_insertions > 0:
-        parts.append(f"{total_insertions} 处新增(+)")
+        parts.append(t("diff.insertions", count=total_insertions))
     if total_deletions > 0:
-        parts.append(f"{total_deletions} 处删除(-)")
+        parts.append(t("diff.deletions", count=total_deletions))
 
-    return "，".join(parts)
+    return ", ".join(parts)
 
 
 def format_diff_as_rich_text_blocks(
@@ -262,7 +264,7 @@ def format_diff_as_rich_text_blocks(
         return [
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": "✅ 没有未提交的更改"},
+                "text": {"type": "mrkdwn", "text": f"✅ {t('diff.no_changes')}"},
             }
         ]
 
@@ -289,11 +291,11 @@ def format_diff_as_rich_text_blocks(
         files_shown += 1
 
         if file_diff.is_new_file:
-            icon, status = "🆕", " (新文件)"
+            icon, status = "🆕", f" {t('diff.new_file')}"
         elif file_diff.is_deleted_file:
-            icon, status = "🗑️", " (已删除)"
+            icon, status = "🗑️", f" {t('diff.deleted_file')}"
         elif file_diff.is_binary:
-            icon, status = "📦", " (二进制)"
+            icon, status = "📦", f" {t('diff.binary_file')}"
         else:
             icon, status = "📄", ""
 
@@ -311,7 +313,9 @@ def format_diff_as_rich_text_blocks(
             blocks.append(
                 {
                     "type": "context",
-                    "elements": [{"type": "mrkdwn", "text": "_二进制文件已更改_"}],
+                    "elements": [
+                        {"type": "mrkdwn", "text": f"_{t('diff.binary_changed')}_"}
+                    ],
                 }
             )
             continue

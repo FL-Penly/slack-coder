@@ -339,8 +339,8 @@ def get_version_info() -> dict:
     result = {"current": current, "latest": None, "has_update": False, "error": None}
 
     try:
-        url = "https://pypi.org/pypi/vibe-remote/json"
-        req = urllib.request.Request(url, headers={"User-Agent": "vibe-remote"})
+        url = "https://pypi.org/pypi/slack-coder/json"
+        req = urllib.request.Request(url, headers={"User-Agent": "slack-coder"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             latest = data.get("info", {}).get("version", "")
@@ -384,10 +384,10 @@ def do_upgrade(auto_restart: bool = True) -> dict:
 
     if is_uv_tool and uv_path:
         # Installed via uv tool, upgrade with uv
-        cmd = [uv_path, "tool", "install", "vibe-remote", "--upgrade"]
+        cmd = [uv_path, "tool", "install", "slack-coder", "--upgrade"]
     else:
         # Installed via pip or other method, use current Python's pip
-        cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "vibe-remote"]
+        cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "slack-coder"]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)

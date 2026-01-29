@@ -309,16 +309,16 @@ class Controller:
             if not stat_output:
                 return
 
+            from core.gist_service import create_full_diff_gist
             from modules.im import InlineKeyboard, InlineButton
 
+            gist_url, _, error = await create_full_diff_gist(working_path)
+            if error or not gist_url:
+                logger.warning(f"Failed to create gist for diff notification: {error}")
+                return
+
             keyboard = InlineKeyboard(
-                [
-                    [
-                        InlineButton(
-                            "📊 查看 Git 变更", callback_data="view_all_changes"
-                        ),
-                    ]
-                ]
+                buttons=[[InlineButton(text="📊 查看 Git 变更", url=gist_url)]]
             )
             await self.im_client.send_message_with_buttons(
                 target_context, "📝 *有代码变更*", keyboard

@@ -9,6 +9,7 @@ from typing import Dict, Optional, Tuple
 from markdown_to_mrkdwn import SlackMarkdownConverter
 
 from modules.agents.base import AgentRequest, BaseAgent
+from modules.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +41,13 @@ class CodexAgent(BaseAgent):
             await self.controller.emit_agent_message(
                 request.context,
                 "notify",
-                "⚠️ Codex is already processing a task in this thread. "
-                "Cancelling the previous run...",
+                f"⚠️ {t('agent.already_processing', agent='Codex')}",
             )
             await self._terminate_process(existing)
             await self.controller.emit_agent_message(
                 request.context,
                 "notify",
-                "⏹ Previous Codex task cancelled. Starting the new request...",
+                f"⏹ {t('agent.previous_cancelled', agent='Codex')}",
             )
         resume_id = self.settings_manager.get_agent_session_id(
             request.settings_key,
@@ -72,7 +72,7 @@ class CodexAgent(BaseAgent):
             await self.controller.emit_agent_message(
                 request.context,
                 "notify",
-                "❌ Codex CLI not found. Please install it or set CODEX_CLI_PATH.",
+                f"❌ {t('errors.codex_not_found')}",
             )
             await self._remove_ack_reaction(request)
             return
@@ -111,7 +111,7 @@ class CodexAgent(BaseAgent):
             await self.controller.emit_agent_message(
                 request.context,
                 "notify",
-                "⚠️ Codex exited with a non-zero status. Review stderr for details.",
+                f"⚠️ {t('agent.exited_non_zero', agent='Codex')}",
             )
 
     async def clear_sessions(self, settings_key: str) -> int:
@@ -226,7 +226,7 @@ class CodexAgent(BaseAgent):
             await self.controller.emit_agent_message(
                 request.context,
                 "notify",
-                f"❗️ Codex stderr:\n```stderr\n{joined}\n```",
+                f"❗️ {t('agent.stderr_output', agent='Codex')}:\n```stderr\n{joined}\n```",
                 parse_mode="markdown",
             )
 
@@ -305,14 +305,18 @@ class CodexAgent(BaseAgent):
         if event_type == "error":
             message = event.get("message", "Unknown error")
             await self.controller.emit_agent_message(
-                request.context, "notify", f"❌ Codex error: {message}"
+                request.context,
+                "notify",
+                f"❌ {t('errors.codex_error', error=message)}",
             )
             return
 
         if event_type == "turn.failed":
             error = event.get("error", {}).get("message", "Turn failed.")
             await self.controller.emit_agent_message(
-                request.context, "notify", f"⚠️ Codex turn failed: {error}"
+                request.context,
+                "notify",
+                f"⚠️ {t('agent.turn_failed', agent='Codex', error=error)}",
             )
             self._pending_assistant_messages.pop(request.composite_session_id, None)
             return

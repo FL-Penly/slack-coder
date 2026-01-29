@@ -6,6 +6,7 @@ import re
 from typing import Dict, Optional, Tuple
 
 from modules.agents import AgentRequest
+from modules.i18n import t
 from modules.im import MessageContext
 
 logger = logging.getLogger(__name__)
@@ -349,7 +350,7 @@ class MessageHandler:
                 handled = await self._handle_inline_stop(context)
                 if not handled:
                     await self.im_client.send_message(
-                        context, "ℹ️ 当前没有正在执行的任务"
+                        context, f"ℹ️ {t('agent.no_active_session')}"
                     )
 
             elif callback_data == "cmd_diff":

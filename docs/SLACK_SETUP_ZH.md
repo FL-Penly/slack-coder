@@ -43,13 +43,13 @@ vibe
     "minor_version": 1
   },
   "display_information": {
-    "name": "Vibe Remote",
+    "name": "Slack Coder",
     "description": "AI coding agent runtime for Slack",
     "background_color": "#262626"
   },
   "features": {
     "bot_user": {
-      "display_name": "Vibe Remote",
+      "display_name": "Slack Coder",
       "always_online": true
     },
     "app_home": {
@@ -132,8 +132,8 @@ vibe
 
 ## 在 Slack 中使用
 
-1. 邀请 bot 到频道：`/invite @Vibe Remote`
-2. 输入 `@Vibe Remote /start` 打开控制面板
+1. 邀请 bot 到频道：`/invite @Slack Coder`
+2. 输入 `@Slack Coder /start` 打开控制面板
 3. 开始写代码！
 
 **技巧：**

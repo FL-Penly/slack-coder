@@ -1,9 +1,9 @@
-# Vibe Remote CLI Reference
+# Slack Coder CLI Reference
 
 ## Quick Start
 
 ```bash
-vibe              # Start Vibe Remote (opens web UI)
+vibe              # Start Slack Coder (opens web UI)
 vibe status       # Check service status
 vibe stop         # Stop all services
 ```
@@ -12,14 +12,14 @@ vibe stop         # Stop all services
 
 ## Remote Web UI Access (SSH Port Forwarding)
 
-By default, the Web UI binds to `127.0.0.1:5123` on the machine where Vibe Remote is running.
+By default, the Web UI binds to `127.0.0.1:5123` on the machine where Slack Coder is running.
 
-If you deploy Vibe Remote on a remote server, **do not expose the UI port to the public internet**.
+If you deploy Slack Coder on a remote server, **do not expose the UI port to the public internet**.
 Instead, use SSH local port forwarding so the UI is only reachable from your own computer.
 
-### 1) Start Vibe Remote on the server
+### 1) Start Slack Coder on the server
 
-SSH into your server and start Vibe Remote:
+SSH into your server and start Slack Coder:
 
 ```bash
 vibe
@@ -62,7 +62,7 @@ ssh -p 2222 -NL 5123:localhost:5123 user@server-ip
 
 ### `vibe`
 
-Start or restart Vibe Remote. Opens the web UI in your browser.
+Start or restart Slack Coder. Opens the web UI in your browser.
 
 ```bash
 vibe
@@ -75,7 +75,7 @@ vibe
 
 ### `vibe stop`
 
-Fully stop all Vibe Remote services.
+Fully stop all Slack Coder services.
 
 ```bash
 vibe stop
@@ -145,7 +145,7 @@ vibe upgrade
 
 ### Understanding "Restart" vs "Stop"
 
-Vibe Remote manages two types of processes:
+Slack Coder manages two types of processes:
 
 | Process | Description |
 |---------|-------------|
@@ -163,7 +163,7 @@ The key difference between commands:
 
 When you run `vibe` to restart:
 - Any **running OpenCode tasks continue uninterrupted**
-- The new Vibe Remote instance "adopts" the existing OpenCode server
+- The new Slack Coder instance "adopts" the existing OpenCode server
 - Session state is preserved
 
 When you run `vibe stop`:
@@ -175,7 +175,7 @@ When you run `vibe stop`:
 
 ### Daily Restart
 
-Just want to restart Vibe Remote without interrupting work:
+Just want to restart Slack Coder without interrupting work:
 
 ```bash
 vibe
@@ -197,7 +197,7 @@ After installing a new version of OpenCode:
 vibe stop && vibe
 ```
 
-### Update Vibe Remote
+### Update Slack Coder
 
 ```bash
 vibe upgrade

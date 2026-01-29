@@ -6,6 +6,7 @@ import logging
 from typing import Optional
 from modules.agents import AgentRequest, get_agent_display_name
 from modules.im import MessageContext, InlineKeyboard, InlineButton
+from modules.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -115,28 +116,34 @@ class CommandHandlers:
 
         buttons = [
             [
-                InlineButton(text="📋 恢复会话", callback_data="cmd_resume"),
-                InlineButton(text="📊 Git 变更", callback_data="cmd_diff"),
+                InlineButton(
+                    text=t("buttons.resume_session"), callback_data="cmd_resume"
+                ),
+                InlineButton(text=t("buttons.git_diff"), callback_data="cmd_diff"),
             ],
             [
-                InlineButton(text="📁 当前目录", callback_data="cmd_cwd"),
-                InlineButton(text="📂 切换目录", callback_data="cmd_change_cwd"),
+                InlineButton(text=t("buttons.current_dir"), callback_data="cmd_cwd"),
+                InlineButton(
+                    text=t("buttons.change_dir"), callback_data="cmd_change_cwd"
+                ),
             ],
             [
-                InlineButton(text="🤖 Agent 设置", callback_data="cmd_routing"),
-                InlineButton(text="⚙️ 设置", callback_data="cmd_settings"),
+                InlineButton(
+                    text=t("buttons.agent_settings"), callback_data="cmd_routing"
+                ),
+                InlineButton(text=t("buttons.settings"), callback_data="cmd_settings"),
             ],
         ]
 
         keyboard = InlineKeyboard(buttons=buttons)
 
-        welcome_text = f"""🎉 **欢迎使用 Slack Coder！**
+        welcome_text = f"""🎉 **{t("welcome.title")}**
 
-👋 你好 **{user_name}**！
-🤖 Agent：**{agent_display_name}**
-📍 频道：**{channel_info.get("name", "Unknown")}**
+👋 {t("welcome.greeting", name=user_name)}
+🤖 {t("welcome.agent", agent=agent_display_name)}
+📍 {t("welcome.channel", channel=channel_info.get("name", "Unknown"))}
 
-直接发消息开始对话，或使用下方按钮："""
+{t("welcome.hint")}"""
 
         # Send command response to channel (not in thread)
         channel_context = self._get_channel_context(context)
@@ -153,16 +160,15 @@ class CommandHandlers:
             cleared = await self.controller.agent_service.clear_sessions(settings_key)
             if not cleared:
                 full_response = (
-                    "📋 No active sessions to clear.\n🔄 Session state has been reset."
+                    f"📋 {t('session.no_active')}\n🔄 {t('session.state_reset')}"
                 )
             else:
                 details = "\n".join(
-                    f"• {agent} → {count} session(s)"
+                    f"• {t('session.cleared_detail', agent=agent, count=count)}"
                     for agent, count in cleared.items()
                 )
                 full_response = (
-                    "✅ Cleared active sessions for:\n"
-                    f"{details}\n🔄 All sessions reset."
+                    f"✅ {t('session.cleared')}\n{details}\n🔄 {t('session.all_reset')}"
                 )
 
             channel_context = self._get_channel_context(context)
@@ -174,7 +180,8 @@ class CommandHandlers:
             try:
                 channel_context = self._get_channel_context(context)
                 await self.im_client.send_message(
-                    channel_context, f"❌ Error clearing session: {str(e)}"
+                    channel_context,
+                    f"❌ {t('errors.clear_session_error', error=str(e))}",
                 )
             except Exception as send_error:
                 logger.error(
@@ -191,16 +198,18 @@ class CommandHandlers:
             formatter = self.im_client.formatter
 
             # Format path properly with code block
-            path_line = f"📁 Current Working Directory:\n{formatter.format_code_inline(absolute_path)}"
+            path_line = (
+                f"📁 {t('cwd.current')}\n{formatter.format_code_inline(absolute_path)}"
+            )
 
             # Build status lines
             status_lines = []
             if os.path.exists(absolute_path):
-                status_lines.append("✅ Directory exists")
+                status_lines.append(f"✅ {t('cwd.exists')}")
             else:
-                status_lines.append("⚠️ Directory does not exist")
+                status_lines.append(f"⚠️ {t('cwd.not_exists')}")
 
-            status_lines.append("💡 This is where Agent will execute commands")
+            status_lines.append(f"💡 {t('cwd.agent_hint')}")
 
             # Combine all parts
             response_text = path_line + "\n" + "\n".join(status_lines)
@@ -211,7 +220,7 @@ class CommandHandlers:
             logger.error(f"Error getting cwd: {e}")
             channel_context = self._get_channel_context(context)
             await self.im_client.send_message(
-                channel_context, f"Error getting working directory: {str(e)}"
+                channel_context, f"❌ {t('errors.get_cwd_error', error=str(e))}"
             )
 
     async def handle_set_cwd(self, context: MessageContext, args: str):
@@ -219,9 +228,7 @@ class CommandHandlers:
         try:
             if not args:
                 channel_context = self._get_channel_context(context)
-                await self.im_client.send_message(
-                    channel_context, "Usage: /set_cwd <path>"
-                )
+                await self.im_client.send_message(channel_context, t("cwd.usage"))
                 return
 
             new_path = args.strip()
@@ -239,13 +246,14 @@ class CommandHandlers:
                 except Exception as e:
                     channel_context = self._get_channel_context(context)
                     await self.im_client.send_message(
-                        channel_context, f"❌ Cannot create directory: {str(e)}"
+                        channel_context,
+                        f"❌ {t('errors.cannot_create_dir', error=str(e))}",
                     )
                     return
 
             if not os.path.isdir(absolute_path):
                 formatter = self.im_client.formatter
-                error_text = f"❌ Path exists but is not a directory: {formatter.format_code_inline(absolute_path)}"
+                error_text = f"❌ {t('errors.path_not_directory', path=formatter.format_code_inline(absolute_path))}"
                 channel_context = self._get_channel_context(context)
                 await self.im_client.send_message(channel_context, error_text)
                 return
@@ -258,8 +266,7 @@ class CommandHandlers:
 
             formatter = self.im_client.formatter
             response_text = (
-                f"✅ Working directory changed to:\n"
-                f"{formatter.format_code_inline(absolute_path)}"
+                f"✅ {t('cwd.changed')}\n{formatter.format_code_inline(absolute_path)}"
             )
             channel_context = self._get_channel_context(context)
             await self.im_client.send_message(channel_context, response_text)
@@ -268,7 +275,7 @@ class CommandHandlers:
             logger.error(f"Error setting cwd: {e}")
             channel_context = self._get_channel_context(context)
             await self.im_client.send_message(
-                channel_context, f"❌ Error setting working directory: {str(e)}"
+                channel_context, f"❌ {t('errors.set_cwd_error', error=str(e))}"
             )
 
     async def handle_change_cwd_modal(self, context: MessageContext):
@@ -278,7 +285,7 @@ class CommandHandlers:
             channel_context = self._get_channel_context(context)
             await self.im_client.send_message(
                 channel_context,
-                "📂 To change working directory, use:\n`/set_cwd <path>`\n\nExample:\n`/set_cwd ~/projects/myapp`",
+                f"📂 {t('cwd.use_command_hint')}",
             )
             return
 
@@ -302,14 +309,14 @@ class CommandHandlers:
                 channel_context = self._get_channel_context(context)
                 await self.im_client.send_message(
                     channel_context,
-                    "❌ Failed to open directory change dialog. Please try again.",
+                    f"❌ {t('errors.failed_open_modal')}",
                 )
         else:
             # No trigger_id, show instructions
             channel_context = self._get_channel_context(context)
             await self.im_client.send_message(
                 channel_context,
-                "📂 Click the 'Change Work Dir' button in the @Vibe Remote /start menu to change working directory.",
+                f"📂 {t('cwd.click_button_hint')}",
             )
 
     async def handle_stop(self, context: MessageContext, args: str = ""):
@@ -336,7 +343,7 @@ class CommandHandlers:
             if not handled:
                 channel_context = self._get_channel_context(context)
                 await self.im_client.send_message(
-                    channel_context, "ℹ️ No active session to stop for this channel."
+                    channel_context, f"ℹ️ {t('agent.no_active_session')}"
                 )
 
         except Exception as e:
@@ -344,7 +351,7 @@ class CommandHandlers:
             # For errors, still use original context to maintain thread consistency
             await self.im_client.send_message(
                 context,  # Use original context
-                f"❌ Error sending stop command: {str(e)}",
+                f"❌ {t('errors.stop_error', error=str(e))}",
             )
 
     async def handle_sessions(self, context: MessageContext, args: str = ""):
@@ -355,7 +362,8 @@ class CommandHandlers:
             opencode_agent = self.controller.agent_service.agents.get("opencode")
             if not opencode_agent:
                 await self.im_client.send_message(
-                    channel_context, "❌ OpenCode agent is not enabled."
+                    channel_context,
+                    f"❌ {t('errors.agent_not_enabled', agent='OpenCode')}",
                 )
                 return
 
@@ -366,14 +374,14 @@ class CommandHandlers:
             if not sessions:
                 await self.im_client.send_message(
                     channel_context,
-                    f"📋 No OpenCode sessions found for:\n`{working_path}`\n\n"
-                    "💡 Start a new conversation to create a session.",
+                    f"📋 {t('session.no_sessions_found', agent='OpenCode')}\n`{working_path}`\n\n"
+                    f"💡 {t('session.start_new_hint')}",
                 )
                 return
 
             lines = [
-                f"📋 **OpenCode Sessions** ({len(sessions)} found)",
-                f"📁 Directory: `{working_path}`",
+                f"📋 **OpenCode {t('session.sessions_found', count=len(sessions))}**",
+                f"📁 {t('modal.directory', path=working_path)}",
                 "",
             ]
 
@@ -409,10 +417,12 @@ class CommandHandlers:
                 lines.append("")
 
             if len(sessions) > max_display:
-                lines.append(f"_...and {len(sessions) - max_display} more sessions_")
+                lines.append(
+                    f"_{t('common.and_more', count=len(sessions) - max_display)}_"
+                )
 
             lines.append("")
-            lines.append("💡 **To resume a session**, use:")
+            lines.append(f"💡 **{t('session.to_resume')}**")
             lines.append("`/resume <session_id> your message`")
 
             await self.im_client.send_message(
@@ -423,7 +433,7 @@ class CommandHandlers:
             logger.error(f"Error listing sessions: {e}", exc_info=True)
             channel_context = self._get_channel_context(context)
             await self.im_client.send_message(
-                channel_context, f"❌ Error listing sessions: {str(e)}"
+                channel_context, f"❌ {t('errors.failed_get_sessions', error=str(e))}"
             )
 
     async def handle_diff(self, context: MessageContext, args: str = ""):
@@ -434,7 +444,7 @@ class CommandHandlers:
             if not os.path.isdir(os.path.join(working_path, ".git")):
                 await self.im_client.send_message(
                     channel_context,
-                    f"❌ 不是 Git 仓库：`{working_path}`",
+                    f"❌ {t('diff.not_git_repo', path=working_path)}",
                 )
                 return
 
@@ -448,12 +458,17 @@ class CommandHandlers:
 
             if not gist_url:
                 await self.im_client.send_message(
-                    channel_context, "✅ 没有未提交的变更"
+                    channel_context, f"✅ {t('diff.no_changes')}"
                 )
                 return
 
-            await self.im_client.send_message(
-                channel_context, f"🔗 <{gist_url}|查看 Git 变更>"
+            keyboard = InlineKeyboard(
+                buttons=[
+                    [InlineButton(text=t("buttons.view_git_changes"), url=gist_url)]
+                ]
+            )
+            await self.im_client.send_message_with_buttons(
+                channel_context, f"✅ {t('diff.gist_created')}", keyboard
             )
 
         except Exception as e:
@@ -465,24 +480,24 @@ class CommandHandlers:
         """Handle /help command - show available commands"""
         channel_context = self._get_channel_context(context)
 
-        help_text = """📚 **Vibe Remote 使用说明**
+        help_text = f"""📚 **{t("help.title")}**
 
-**快速开始**
-• 输入 `/vibe-start` 打开控制面板
-• 直接 @Vibe Remote 发消息即可与 AI 对话
+**{t("help.quick_start")}**
+• {t("help.quick_start_panel")}
+• {t("help.quick_start_chat")}
 
-**控制面板功能**
-• 📋 恢复会话 - 选择并恢复历史对话
-• 🛑 停止执行 - 中断当前 AI 任务
-• 📁 当前目录 / 📂 切换目录 - 管理工作目录
-• 📊 Git 变更 - 查看代码改动
-• 🔄 清除会话 - 重置所有会话
-• 🤖 Agent 设置 - 切换 AI 模型
+**{t("help.panel_features")}**
+• 📋 {t("help.feature_resume")}
+• 🛑 {t("help.feature_stop")}
+• 📁 {t("help.feature_cwd")}
+• 📊 {t("help.feature_diff")}
+• 🔄 {t("help.feature_clear")}
+• 🤖 {t("help.feature_agent")}
 
-**使用技巧**
-• 每个 Slack 线程 = 独立的对话会话
-• 可同时开多个线程并行处理任务
-• 在线程中输入 `stop` 可快速停止
+**{t("help.tips_title")}**
+• {t("help.tip_thread")}
+• {t("help.tip_parallel")}
+• {t("help.tip_quick_stop")}
 """
 
         await self.im_client.send_message(
@@ -501,7 +516,7 @@ class CommandHandlers:
             if not trigger_id:
                 channel_context = self._get_channel_context(context)
                 await self.im_client.send_message(
-                    channel_context, "❌ 无法打开弹窗，请重试"
+                    channel_context, f"❌ {t('errors.failed_open_modal')}"
                 )
                 return
 
@@ -523,7 +538,8 @@ class CommandHandlers:
             if not sessions:
                 channel_context = self._get_channel_context(context)
                 await self.im_client.send_message(
-                    channel_context, f"📭 当前目录没有找到 {agent_name} 的历史会话"
+                    channel_context,
+                    f"📭 {t('session.no_sessions_found', agent=agent_name)}",
                 )
                 return
 
@@ -536,7 +552,7 @@ class CommandHandlers:
             logger.error(f"Error showing sessions modal: {e}", exc_info=True)
             channel_context = self._get_channel_context(context)
             await self.im_client.send_message(
-                channel_context, f"❌ 获取会话列表失败：{str(e)}"
+                channel_context, f"❌ {t('errors.failed_get_sessions', error=str(e))}"
             )
 
     async def handle_resume_session(
@@ -560,7 +576,7 @@ class CommandHandlers:
             logger.error(f"Error resuming session: {e}", exc_info=True)
             channel_context = self._get_channel_context(context)
             await self.im_client.send_message(
-                channel_context, f"❌ 恢复会话失败：{str(e)}"
+                channel_context, f"❌ {t('errors.failed_resume_session', error=str(e))}"
             )
 
     async def _resume_opencode_session(
@@ -573,7 +589,7 @@ class CommandHandlers:
         opencode_agent = self.controller.agent_service.agents.get("opencode")
         if not opencode_agent:
             await self.im_client.send_message(
-                channel_context, "❌ OpenCode agent 未启用"
+                channel_context, f"❌ {t('errors.agent_not_enabled', agent='OpenCode')}"
             )
             return
 
@@ -583,7 +599,8 @@ class CommandHandlers:
         target_session = await server.get_session(session_id, working_path)
         if not target_session:
             await self.im_client.send_message(
-                channel_context, f"❌ 会话不存在：`{session_id}`"
+                channel_context,
+                f"❌ {t('session.session_not_found', session_id=session_id)}",
             )
             return
 
@@ -627,7 +644,8 @@ class CommandHandlers:
         target_session = ClaudeClient.get_session(session_id, working_path)
         if not target_session:
             await self.im_client.send_message(
-                channel_context, f"❌ 会话不存在：`{session_id}`"
+                channel_context,
+                f"❌ {t('session.session_not_found', session_id=session_id)}",
             )
             return
 
@@ -655,7 +673,7 @@ class CommandHandlers:
             logger.info(f"Bound thread {message_ts} to Claude session {session_id}")
 
     def _format_opencode_history(self, messages: list, display_name: str) -> list:
-        history_lines = [f"📋 **恢复会话：{display_name}**\n"]
+        history_lines = [f"📋 **{t('session.resume_title', name=display_name)}**\n"]
         msg_count = 0
         for msg in messages[-10:]:
             info = msg.get("info", {})
@@ -674,12 +692,12 @@ class CommandHandlers:
                 history_lines.append(f"{role_icon} {content_preview}")
                 msg_count += 1
         if msg_count == 0:
-            history_lines.append("_(暂无历史消息)_")
-        history_lines.append("\n---\n💬 **在下方回复继续对话**")
+            history_lines.append(f"_({t('session.no_history')})_")
+        history_lines.append(f"\n---\n💬 **{t('session.resume_hint')}**")
         return history_lines
 
     def _format_claude_history(self, messages: list, display_name: str) -> list:
-        history_lines = [f"📋 **恢复会话：{display_name}**\n"]
+        history_lines = [f"📋 **{t('session.resume_title', name=display_name)}**\n"]
         msg_count = 0
         for msg in messages[-10:]:
             msg_type = msg.get("type", "")
@@ -705,8 +723,8 @@ class CommandHandlers:
                     history_lines.append(f"🤖 {content_preview}")
                     msg_count += 1
         if msg_count == 0:
-            history_lines.append("_(暂无历史消息)_")
-        history_lines.append("\n---\n💬 **在下方回复继续对话**")
+            history_lines.append(f"_({t('session.no_history')})_")
+        history_lines.append(f"\n---\n💬 **{t('session.resume_hint')}**")
         return history_lines
 
     async def handle_view_all_changes(self, context: MessageContext):
@@ -728,12 +746,15 @@ class CommandHandlers:
             if not gist_url:
                 await self.im_client.send_message(
                     channel_context,
-                    "✅ 没有未提交的变更",
+                    f"✅ {t('diff.no_changes')}",
                 )
                 return
 
-            await self.im_client.send_message(
-                channel_context, f"🔗 <{gist_url}|查看全部 Diff>"
+            keyboard = InlineKeyboard(
+                buttons=[[InlineButton(text=t("buttons.view_all_diff"), url=gist_url)]]
+            )
+            await self.im_client.send_message_with_buttons(
+                channel_context, f"✅ {t('diff.gist_created')}", keyboard
             )
 
         except Exception as e:

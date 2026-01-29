@@ -1,13 +1,13 @@
-# Vibe Remote Installation Script for Windows
-# Usage: irm https://raw.githubusercontent.com/cyhhao/vibe-remote/master/install.ps1 | iex
+# Slack Coder Installation Script for Windows
+# Usage: irm https://raw.githubusercontent.com/FL-Penly/slack-coder/master/install.ps1 | iex
 #
 # Prerequisites: None! uv will be installed automatically and manages Python for you.
 
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$REPO = "cyhhao/vibe-remote"
-$PACKAGE_NAME = "vibe-remote"
+$REPO = "FL-Penly/slack-coder"
+$PACKAGE_NAME = "slack-coder"
 
 function Write-Banner {
     Write-Host @"
@@ -84,7 +84,7 @@ function Install-Uv {
 }
 
 function Install-Vibe {
-    Write-Info "Installing vibe-remote (Python will be downloaded automatically if needed)..."
+    Write-Info "Installing slack-coder (Python will be downloaded automatically if needed)..."
     
     # uv tool install will auto-download Python if not available
     try {
@@ -93,7 +93,7 @@ function Install-Vibe {
         & uv tool install "git+https://github.com/$REPO.git" --force
     }
     
-    Write-Success "vibe-remote installed successfully"
+    Write-Success "slack-coder installed successfully"
 }
 
 function Test-Installation {
@@ -103,21 +103,21 @@ function Test-Installation {
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
     $env:Path += ";$env:USERPROFILE\.local\bin"
     
-    if (Test-Command "vibe") {
-        Write-Success "vibe command is available"
+    if (Test-Command "slack-coder") {
+        Write-Success "slack-coder command is available"
         Write-Host ""
-        & vibe --help
+        & slack-coder --help
         return $true
     }
     
     # Check common install locations
-    $vibeLocations = @(
-        "$env:USERPROFILE\.local\bin\vibe.exe"
+    $slackCoderLocations = @(
+        "$env:USERPROFILE\.local\bin\slack-coder.exe"
     )
     
-    foreach ($loc in $vibeLocations) {
+    foreach ($loc in $slackCoderLocations) {
         if (Test-Path $loc) {
-            Write-Warning "vibe installed at $loc but not in PATH"
+            Write-Warning "slack-coder installed at $loc but not in PATH"
             Write-Host ""
             Write-Host "Add this directory to your PATH:" -ForegroundColor Yellow
             Write-Host "  $(Split-Path $loc)"
@@ -126,7 +126,7 @@ function Test-Installation {
         }
     }
     
-    Write-Error "Installation verification failed. vibe command not found."
+    Write-Error "Installation verification failed. slack-coder command not found."
 }
 
 function Write-NextSteps {
@@ -139,14 +139,14 @@ function Write-NextSteps {
     Write-Host "  3. Enable channels and start chatting with AI agents"
     Write-Host ""
     Write-Host "Quick commands:" -ForegroundColor Blue
-    Write-Host "  vibe          - Start Vibe Remote (service + web UI)"
-    Write-Host "  vibe status   - Check service status"
-    Write-Host "  vibe stop     - Stop all services"
-    Write-Host "  vibe doctor   - Run diagnostics"
+    Write-Host "  slack-coder          - Start Slack Coder (service + web UI)"
+    Write-Host "  slack-coder status   - Check service status"
+    Write-Host "  slack-coder stop     - Stop all services"
+    Write-Host "  slack-coder doctor   - Run diagnostics"
     Write-Host ""
     Write-Host "Uninstall:" -ForegroundColor Blue
-    Write-Host "  uv tool uninstall vibe-remote"
-    Write-Host "  Remove-Item -Recurse ~\.vibe_remote  # remove config and data"
+    Write-Host "  uv tool uninstall slack-coder"
+    Write-Host "  Remove-Item -Recurse ~\.slack_coder  # remove config and data"
     Write-Host ""
     Write-Host "Documentation:" -ForegroundColor Blue
     Write-Host "  https://github.com/$REPO#readme"
@@ -162,7 +162,7 @@ function Main {
     # Install uv (which manages Python automatically)
     Install-Uv
     
-    # Install vibe-remote
+    # Install slack-coder
     Install-Vibe
     
     # Verify

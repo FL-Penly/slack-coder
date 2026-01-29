@@ -1,4 +1,4 @@
-"""Vibe Remote - Local-first agent runtime for Slack"""
+"""Slack Coder - AI coding agent for Slack"""
 
 try:
     from vibe._version import __version__

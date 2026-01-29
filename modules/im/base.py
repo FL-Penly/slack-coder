@@ -22,10 +22,15 @@ class MessageContext:
 
 @dataclass
 class InlineButton:
-    """Platform-agnostic inline button"""
+    """Platform-agnostic inline button
+
+    If url is provided, the button will open the URL directly when clicked.
+    Otherwise, it triggers the callback_data action.
+    """
 
     text: str
-    callback_data: str
+    callback_data: str = ""
+    url: Optional[str] = None  # If set, button opens URL directly
 
 
 @dataclass

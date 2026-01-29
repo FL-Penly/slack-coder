@@ -43,13 +43,13 @@ Go to [api.slack.com/apps](https://api.slack.com/apps) and create app with this 
     "minor_version": 1
   },
   "display_information": {
-    "name": "Vibe Remote",
+    "name": "Slack Coder",
     "description": "AI coding agent runtime for Slack",
     "background_color": "#262626"
   },
   "features": {
     "bot_user": {
-      "display_name": "Vibe Remote",
+      "display_name": "Slack Coder",
       "always_online": true
     },
     "app_home": {
@@ -123,7 +123,7 @@ Review your configuration and click **Finish & Start**:
 
 ![Review & Finish](../assets/screenshots/setup-finish-en.png)
 
-The wizard shows quick tips on how to use Vibe Remote.
+The wizard shows quick tips on how to use Slack Coder.
 
 ---
 
@@ -142,8 +142,8 @@ From here you can:
 
 ## Using in Slack
 
-1. Invite bot to channel: `/invite @Vibe Remote`
-2. Type `@Vibe Remote /start` to open control panel
+1. Invite bot to channel: `/invite @Slack Coder`
+2. Type `@Slack Coder /start` to open control panel
 3. Start coding!
 
 **Tips:**

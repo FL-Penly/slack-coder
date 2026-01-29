@@ -37,7 +37,7 @@ This file defines how coding agents should work in this repository.
 - Never commit secrets (tokens, credentials files).
 - Avoid destructive git operations unless explicitly requested (e.g., `reset --hard`, force-push).
 
-## 2) Project-Specific (Vibe Remote)
+## 2) Project-Specific (Slack Coder)
 
 ### Structure
 

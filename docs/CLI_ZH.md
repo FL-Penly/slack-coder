@@ -1,9 +1,9 @@
-# Vibe Remote CLI 参考手册
+# Slack Coder CLI 参考手册
 
 ## 快速开始
 
 ```bash
-vibe              # 启动 Vibe Remote（打开 Web UI）
+vibe              # 启动 Slack Coder（打开 Web UI）
 vibe status       # 查看服务状态
 vibe stop         # 停止所有服务
 ```
@@ -12,12 +12,12 @@ vibe stop         # 停止所有服务
 
 ## 远端服务器访问 Web UI（SSH 端口转发）
 
-默认情况下，Web UI 只监听在运行 Vibe Remote 的那台机器的 `127.0.0.1:5123`。
+默认情况下，Web UI 只监听在运行 Slack Coder 的那台机器的 `127.0.0.1:5123`。
 
-如果你把 Vibe Remote 部署在远端服务器上，**不建议把 UI 端口直接暴露到公网**。
+如果你把 Slack Coder 部署在远端服务器上，**不建议把 UI 端口直接暴露到公网**。
 推荐使用 SSH 本地端口转发，把远端的 UI 端口安全地映射到你自己的电脑上访问。
 
-### 1）在服务器上启动 Vibe Remote
+### 1）在服务器上启动 Slack Coder
 
 先 SSH 登录到服务器并启动：
 
@@ -62,7 +62,7 @@ ssh -p 2222 -NL 5123:localhost:5123 user@server-ip
 
 ### `vibe`
 
-启动或重启 Vibe Remote。会在浏览器中打开 Web UI。
+启动或重启 Slack Coder。会在浏览器中打开 Web UI。
 
 ```bash
 vibe
@@ -75,7 +75,7 @@ vibe
 
 ### `vibe stop`
 
-完全停止所有 Vibe Remote 服务。
+完全停止所有 Slack Coder 服务。
 
 ```bash
 vibe stop
@@ -145,7 +145,7 @@ vibe upgrade
 
 ### 理解「重启」与「停止」的区别
 
-Vibe Remote 管理两类进程：
+Slack Coder 管理两类进程：
 
 | 进程 | 说明 |
 |------|------|
@@ -163,7 +163,7 @@ Vibe Remote 管理两类进程：
 
 当你运行 `vibe` 重启时：
 - **正在运行的 OpenCode 任务会继续执行**，不会中断
-- 新的 Vibe Remote 实例会「认领」现有的 OpenCode 服务器
+- 新的 Slack Coder 实例会「认领」现有的 OpenCode 服务器
 - 会话状态得以保留
 
 当你运行 `vibe stop` 时：
@@ -175,7 +175,7 @@ Vibe Remote 管理两类进程：
 
 ### 日常重启
 
-只想重启 Vibe Remote，不中断正在进行的工作：
+只想重启 Slack Coder，不中断正在进行的工作：
 
 ```bash
 vibe
@@ -197,7 +197,7 @@ vibe stop && vibe
 vibe stop && vibe
 ```
 
-### 更新 Vibe Remote
+### 更新 Slack Coder
 
 ```bash
 vibe upgrade
